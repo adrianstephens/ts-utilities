@@ -1,0 +1,28 @@
+{
+  "name": "@isopodlabs/utilities",
+  "version": "1.4.0",
+  "description": "Various typescript helpers.",
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": [
+    "typescript",
+    "string",
+    "iterator",
+    "algorithm"
+  ],
+  "author": "Adrian Stephens",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.13.8",
+    "eslint": "^9.21.0",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.26.0"
+  }
+}
