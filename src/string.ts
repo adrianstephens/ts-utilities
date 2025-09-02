@@ -36,25 +36,36 @@ export function trim0(value: string) {
 }
 
 export function replace(value: string, re: RegExp, process: (match: RegExpExecArray)=>string): string {
-	let m: RegExpExecArray | null;
 	let result = "";
 	let i = 0;
-	while ((m = re.exec(value))) {
+	for (let m; (m = re.exec(value));) {
 		result += value.substring(i, m.index) + process(m);
 		i = re.lastIndex;
 	}
 	return result + value.substring(i);
 }
-
+/*
 export async function async_replace(value: string, re: RegExp, process: (match: RegExpExecArray)=>Promise<string>): Promise<string> {
-	let m: RegExpExecArray | null;
 	let result = "";
 	let i = 0;
-	while ((m = re.exec(value))) {
+	for (let m; (m = re.exec(value));) {
 		result += value.substring(i, m.index) + await process(m);
 		i = re.lastIndex;
 	}
 	return result + value.substring(i);
+}
+*/
+
+export async function async_replace(value: string, re: RegExp, process: (match: RegExpExecArray)=>Promise<string>): Promise<string> {
+	const combine = async (m: RegExpExecArray) => value.substring(i, m!.index) + await process(m!);
+
+	const promises: Promise<string>[] = [];
+	let i = 0;
+	for (let m; (m = re.exec(value));) {
+		promises.push(combine(m));
+		i = re.lastIndex;
+	}
+	return (await Promise.all(promises)).join('') + value.substring(i);
 }
 
 export function replace_back(value: string, re: RegExp, process: (match: RegExpExecArray, right:string)=>string): string {
@@ -87,10 +98,10 @@ export function splitEvery(s : string, n : number) {
 }
 
 export function tag(strings: TemplateStringsArray, ...keys: any[]) {
-    return ((...values: any[]) => {
+    return (...values: any[]) => {
         const dict	= values.at(-1) || {};
 		return keys.map((key, i) => (Number.isInteger(key) ? values[key] : dict[key]) + strings[i + 1]).join('');
-    });
+    };
 }
 
 export function previousChar(str: string, pos: number) {

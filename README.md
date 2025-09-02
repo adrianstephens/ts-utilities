@@ -1,9 +1,12 @@
 # @isopodlabs/utilities
+[![npm version](https://img.shields.io/npm/v/@isopodlabs/utilities.svg)](https://www.npmjs.com/package/@isopodlabs/utilities)
+[![GitHub stars](https://img.shields.io/github/stars/adrianstephens/utilities.svg?style=social)](https://github.com/adrianstephens/utilities)
+[![License](https://img.shields.io/npm/l/@isopodlabs/utilities.svg)](LICENSE)
 
 This package provides a set of utilities for TypeScript.
 
 ## ☕ Support My Work  
-If you use this package, consider [buying me a tea](https://coff.ee/adrianstephens) to support future updates!  
+If you use this package, consider [buying me a cup of tea](https://coff.ee/adrianstephens) to support future updates!  
 
 ## Usage
 
