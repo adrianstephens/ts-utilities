@@ -1,7 +1,7 @@
 # @isopodlabs/utilities
 [![npm version](https://img.shields.io/npm/v/@isopodlabs/utilities.svg)](https://www.npmjs.com/package/@isopodlabs/utilities)
 [![GitHub stars](https://img.shields.io/github/stars/adrianstephens/utilities.svg?style=social)](https://github.com/adrianstephens/utilities)
-[![License](https://img.shields.io/npm/l/@isopodlabs/utilities.svg)](LICENSE)
+[![License](https://img.shields.io/npm/l/@isopodlabs/utilities.svg)](LICENSE.txt)
 
 This package provides a set of utilities for TypeScript.
 
