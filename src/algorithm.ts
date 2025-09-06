@@ -1,4 +1,4 @@
-
+import { compare } from "./utils";
 
 type PartitionIndex<U> = U extends boolean ? 'true'|'false' : U;
 
@@ -21,6 +21,7 @@ export function lowerBound<T>(array: T[], value: T, func: (a: T, b: T, i: number
 	return i;
 }
 
+/*
 export function argmin<T>(array: T[], func?: (i: T) => number) {
 	let mini	= 0;
 	let minv	= func ? func(array[0]) : array[0];
@@ -32,4 +33,32 @@ export function argmin<T>(array: T[], func?: (i: T) => number) {
 		}
 	}
 	return mini;
+}
+	*/
+export function argmin<T>(array: T[], func: (a: T, b: T) => number = compare) {
+	let mini	= 0;
+	for (let i = 1; i < array.length; i++) {
+		const v = func(array[i], array[mini]);
+		if (v < 0)
+			mini = i;
+	}
+	return mini;
+}
+
+export function min<T>(array: T[], func: (a: T, b: T) => number = compare) {
+	return array[argmin(array, func)];
+}
+
+export function argmax<T>(array: T[], func: (a: T, b: T) => number = compare) {
+	let maxi	= 0;
+	for (let i = 1; i < array.length; i++) {
+		const v = func(array[i], array[maxi]);
+		if (v > 0)
+			maxi = i;
+	}
+	return maxi;
+}
+
+export function max<T>(array: T[], func: (a: T, b: T) => number = compare) {
+	return array[argmax(array, func)];
 }

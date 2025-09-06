@@ -7,6 +7,10 @@ export class Lazy<T> {
 			this._value = this.factory();
 		return this._value;
 	}
+	// Add 'then' method only when T is a Promise
+	then<U>(this: T extends Promise<infer R> ? Lazy<T> : never, onFulfilled: (value: T extends Promise<infer R> ? R : never) => U): Promise<U> {
+		return (this.value as any).then(onFulfilled);
+	}
 }
 
 export class AsyncLazy<T> {
@@ -18,6 +22,17 @@ export class AsyncLazy<T> {
 			this.factory().then(v => this._value = v);
 		}
 		return this._value;
+	}
+	then(fn: (v: T) => void) {
+		if (this._value === undefined) {
+			this._value = null;
+			this.factory().then(v => {
+				this._value = v;
+				fn(v);
+			});
+		} else if (this._value !== null) {
+			fn(this._value);
+		}
 	}
 }
 
