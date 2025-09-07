@@ -13,29 +13,6 @@ export class Lazy<T> {
 	}
 }
 
-export class AsyncLazy<T> {
-	private _value: T | null | undefined;
-	constructor(private factory: () => Promise<T>) {}
-	get value() {
-		if (this._value === undefined) {
-			this._value = null;
-			this.factory().then(v => this._value = v);
-		}
-		return this._value;
-	}
-	then(fn: (v: T) => void) {
-		if (this._value === undefined) {
-			this._value = null;
-			this.factory().then(v => {
-				this._value = v;
-				fn(v);
-			});
-		} else if (this._value !== null) {
-			fn(this._value);
-		}
-	}
-}
-
 export class CallCombiner0 {
 	private timeout:	ReturnType<typeof setTimeout> | null = null;
 

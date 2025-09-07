@@ -104,7 +104,7 @@ export async function serial(...fns: (()=>any)[]): Promise<any[]> {
 	return results;
 }
 
-export function filterIterable<T>(iterable: Iterable<T>, func:(v: T, i: number)=>boolean) {
+export function filterIterable<T>(iterable: Iterable<T>, func:(v: T, i: number)=>unknown): T[] {
 	const array: T[] = [];
 	let i = 0;
 	for (const v of iterable)
@@ -113,7 +113,7 @@ export function filterIterable<T>(iterable: Iterable<T>, func:(v: T, i: number)=
 	return array;
 }
 
-export async function asyncFilter<T>(iterable: Iterable<T>, func:(v: T) => Promise<boolean>) {
+export async function asyncFilter<T>(iterable: Iterable<T>, func:(v: T) => Promise<unknown>) {
 	const filters = await Promise.all(mapIterable(iterable, func));
 	return filterIterable(iterable, (_, i) => filters[i]);
 }
