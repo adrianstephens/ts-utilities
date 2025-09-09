@@ -1,17 +1,14 @@
 
-import {compare} from './utils';
+import {compare} from './object';
 
 //-----------------------------------------------------------------------------
 //	iterator
 //-----------------------------------------------------------------------------
 
+// resut of ...
 export type SpreadType<T> = T extends Iterable<infer U> ? U[] : never;
 
-export function arrayAppend<T, U extends Iterable<T>>(array: T[], items: U) {
-	for (const i of items)
-		array.push(i);
-}
-
+//remove element of array
 export function arrayRemove<T>(array: T[], item: T) {
 	const index = array.indexOf(item);
 	if (index === -1)
@@ -58,11 +55,11 @@ export function arrayReverse<T>(array: T[], start: number, end: number): void {
     }
 }
 
-export function array_make<T>(n: number, constructor: new () => T): T[] {
+export function arrayMake<T>(n: number, constructor: new () => T): T[] {
 	return Array.from({length: n}, () => new constructor);
 }
 
-export function eachIterable<T>(iterable: Iterable<T>|undefined, func: (v: T, i: number) => void) {
+export function forEach<T>(iterable: Iterable<T>|undefined, func: (v: T, i: number) => void) {
 	if (iterable) {
 		let i = 0;
 		for (const v of iterable)
@@ -70,7 +67,7 @@ export function eachIterable<T>(iterable: Iterable<T>|undefined, func: (v: T, i:
 	}
 }
 
-export function findIterable<T>(iterable: Iterable<T>|undefined, func: (v: T) => boolean) {
+export function find<T>(iterable: Iterable<T>|undefined, func: (v: T) => boolean) {
 	if (iterable) {
 		for (const v of iterable) {
 			if (func(v))
@@ -79,20 +76,51 @@ export function findIterable<T>(iterable: Iterable<T>|undefined, func: (v: T) =>
 	}
 }
 
-export function mapIterable<T, U>(iterable: Iterable<T>|undefined, func: (v: T, i: number) => U): U[] {
+export function map<T, U>(iterable: Iterable<T>|undefined, func: (v: T, i: number) => U): U[] {
 	return iterable ? Array.from(iterable, func) : [];
 }
 
-export async function asyncMap<T,U>(iterable: Iterable<T>|undefined, func:(v: T, i:number) => Promise<U>): Promise<U[]> {
-	return Promise.all(mapIterable(iterable, func));
+export function reduce<T, U>(iterable: Iterable<T>, func: (acc: U, v: T, i: number, iterable: Iterable<T>) => U, initialValue: U) {
+	let i = 0;
+	let acc = initialValue;
+	for (const v of iterable)
+		acc = func(acc, v, i++, iterable);
+	return acc;
 }
 
-export async function asyncReduce<T, U>(array: T[], func: (acc: U, v: T, i: number, array: T[]) => Promise<U>, initialValue: U) {
-	return array.reduce<Promise<U>>(
-		async (promise, v, i, array) => func(await promise, v, i, array),
+export function filter<T>(iterable: Iterable<T>, func:(v: T, i: number)=>unknown): T[] {
+	const array: T[] = [];
+	let i = 0;
+	for (const v of iterable)
+		if (func(v, i++))
+			array.push(v);
+	return array;
+}
+
+export async function asyncMap<T,U>(iterable: Iterable<T>|undefined, func:(v: T, i:number) => Promise<U>): Promise<U[]> {
+	return Promise.all(map(iterable, func));
+}
+
+export async function asyncReduce<T, U>(iterable: Iterable<T>, func: (acc: U, v: T, i: number, iterable: Iterable<T>) => Promise<U>, initialValue: U) {
+	let i = 0;
+	let acc = initialValue;
+	for (const v of iterable)
+		acc = await func(acc, v, i++, iterable);
+	return acc;
+/*
+	return reduce<T, Promise<U>>(
+		iterable,
+		async (promise, v, i, iterable) => func(await promise, v, i, iterable),
 		Promise.resolve(initialValue)
 	);
+	*/
 }
+
+export async function asyncFilter<T>(iterable: Iterable<T>, func:(v: T) => Promise<unknown>) {
+	const filters = await Promise.all(map(iterable, func));
+	return filter(iterable, (_, i) => filters[i]);
+}
+
 
 export async function parallel(...fns: (()=>any)[]): Promise<any[]> {
 	return asyncMap(fns, f => f());
@@ -104,24 +132,3 @@ export async function serial(...fns: (()=>any)[]): Promise<any[]> {
 	return results;
 }
 
-export function filterIterable<T>(iterable: Iterable<T>, func:(v: T, i: number)=>unknown): T[] {
-	const array: T[] = [];
-	let i = 0;
-	for (const v of iterable)
-		if (func(v, i++))
-			array.push(v);
-	return array;
-}
-
-export async function asyncFilter<T>(iterable: Iterable<T>, func:(v: T) => Promise<unknown>) {
-	const filters = await Promise.all(mapIterable(iterable, func));
-	return filterIterable(iterable, (_, i) => filters[i]);
-}
-
-export function mapObject<T, U>(obj: Record<string, T>, func:(x:[k:string, v:T])=>[k:string, v:U]) : Record<string, U> {
-	return Object.fromEntries(Object.entries(obj).map(x => func(x)));
-}
-
-export function filterObject<T>(obj: Record<string, T>, func:(x:[k:string, v:T])=>boolean) : Record<string, T> {
-	return Object.fromEntries(Object.entries(obj).filter(x => func(x)));
-}
