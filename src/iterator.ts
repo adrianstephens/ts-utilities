@@ -101,6 +101,15 @@ export async function asyncMap<T,U>(iterable: Iterable<T>|undefined, func:(v: T,
 	return Promise.all(map(iterable, func));
 }
 
+export async function asyncMapSerial<T,U>(iterable: Iterable<T>|undefined, func:(v: T, i:number) => Promise<U>): Promise<U[]> {
+	const results: U[] = [];
+	let i = 0;
+	for (const v of iterable || [])
+		results.push(await func(v, i++));
+	return results;
+}
+
+
 export async function asyncReduce<T, U>(iterable: Iterable<T>, func: (acc: U, v: T, i: number, iterable: Iterable<T>) => Promise<U>, initialValue: U) {
 	let i = 0;
 	let acc = initialValue;
