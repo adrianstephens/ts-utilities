@@ -28,7 +28,7 @@ export function String2(value: string) {
 	return new CaseInsensitiveString2(value);
 }
 
-export function compare(a: string, b: string) {
+export function compare(a: string|CaseInsensitiveString, b: string|CaseInsensitiveString) {
 	const ai = a.toUpperCase(), bi = b.toUpperCase();
 	return ai < bi ? -1 : ai > bi ? 1 : 0;
 }
@@ -56,13 +56,8 @@ export function Record2<T>(obj: Record<string, T>) {
 
 export class Map<T> extends globalThis.Map<string, T> {
 	constructor(entries?: Iterable<[string, T]>) {
-		super();
-		if (entries) {
-			for (const [key, value] of entries)
-				this.set(key, value);
-		}
+		super(Array.from(entries || []).map(([k, v]) => [k.toUpperCase(), v] as [string, T]));
 	}
-
 	delete(key: string) 		{ return super.delete(key.toUpperCase()); }
 	get(key: string) 			{ return super.get(key.toUpperCase()); }
 	has(key: string) 			{ return super.has(key.toUpperCase()); }
@@ -71,11 +66,7 @@ export class Map<T> extends globalThis.Map<string, T> {
 
 export class Set extends globalThis.Set<string> {
 	constructor(values?: Iterable<string>) {
-		super();
-		if (values) {
-			for (const value of values)
-				this.add(value);
-		}
+		super(Array.from(values || []).map(v => v.toUpperCase()));
 	}
 	add(value: string) 			{ return super.add(value.toUpperCase()); }
 	delete(value: string)		{ return super.delete(value.toUpperCase()); }

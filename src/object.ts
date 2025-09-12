@@ -1,6 +1,4 @@
 
-
-
 export function mapObject<T, U>(obj: Record<string, T>, func:(x:[k:string, v:T])=>[k:string, v:U]) : Record<string, U> {
 	return Object.fromEntries(Object.entries(obj).map(x => func(x)));
 }
@@ -64,13 +62,13 @@ export class Lazy<T> {
 }
 
 export class CallCombiner0 {
-	private timeout:	ReturnType<typeof setTimeout> | null = null;
+	private timeout?: ReturnType<typeof setTimeout>;
 
 	combine(delay: number, func: ()=>void) {
 		if (this.timeout)
 			clearTimeout(this.timeout);
-		this.timeout = setTimeout(()=> {
-			this.timeout = null;
+		this.timeout = setTimeout(() => {
+			this.timeout = undefined;
 			func();
 		}, delay);
 	}
@@ -95,9 +93,22 @@ export function makeCache<T>(load: (key: string)=>T) {
 				cache[fullpath] = load(fullpath);
 			return cache[fullpath];
 		},
-		remove: (fullpath: string) => {
-			delete cache[fullpath];
-		},
+		remove: (fullpath: string) => delete cache[fullpath],
+		clear:	() => Object.keys(cache).forEach(k => delete cache[k]),
 	};
+}
+
+export function union<T>(a: Set<T>, b: Set<T>): Set<T> {
+	return new Set([...a, ...b]);
+}
+
+export function difference<T>(a: Set<T>, b: Set<T>): [Set<T>, Set<T>] {
+	const remaining = new Set(a);
+	const removed	= new Set<T>();
+	for (const item of b) {
+		if (remaining.delete(item))
+			removed.add(item);
+	}
+	return [remaining, removed];
 }
 

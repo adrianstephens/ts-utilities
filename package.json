@@ -16,8 +16,7 @@
 		"README.md"
 	],
 	"scripts": {
-		"build": "tsc",
-		"test": "echo \"No tests specified\" && exit 0"
+		"build": "tsc"
 	},
 	"keywords": [
 		"typescript",
