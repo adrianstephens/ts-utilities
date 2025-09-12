@@ -28,5 +28,5 @@ console.log(x);
 const s = regexp.toRegExpString(x);
 console.log(s);
 
-const t = regexp.capture(regexp.text('test'));
+const t = regexp.capture('test');
 console.log(regexp.toRegExpString(t));

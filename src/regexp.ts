@@ -84,7 +84,9 @@ const posixClasses: Record<string, string> = {
     xdigit: 'A-Fa-f0-9',
 };
 
-class CharacterSet extends SparseBits {
+class klass extends SparseBits {
+	type: 'class' = 'class';
+
 	setChar(char: string) {
 		this.set(char.charCodeAt(0));
 	}
@@ -123,8 +125,24 @@ class CharacterSet extends SparseBits {
 		}
 		return s;
 	}
+
+	static fromString(value: string): klass {
+		return new klass(false).setString(value);
+	}
 };
 
+export function stringClass(value: string): klass {
+	return new klass(false).setString(value);
+}
+export function negStringClass(value: string): klass {
+	return new klass(true).clearString(value);
+}
+
+export function text(c: string): string {
+	return c;
+}
+
+/*
 interface text {
 	type: 'text';
 	value: string;
@@ -132,6 +150,7 @@ interface text {
 export function text(c: string): text {
 	return {type: 'text', value: c};
 }
+*/
 
 interface concatenation {
 	type: 'concat';
@@ -168,17 +187,6 @@ export function capture(part: part, name?: string): capture {
 	return {type: 'capture', part, name};
 }
 
-interface klass {
-	type: 'class';
-	value: CharacterSet;
-}
-export function klass(value: string): klass {
-	return {type: 'class', value: new CharacterSet(false).setString(value)};
-}
-export function negklass(value: string): klass {
-	return {type: 'class', value: new CharacterSet(true).clearString(value)};
-}
-
 interface unicode {
 	type: 'unicode' | 'notunicode';
 	property: string;
@@ -198,13 +206,33 @@ export function quantified(part: part, min: number, max: number = -1, greedy = t
 interface boundary {
 	type: 'wordbound' | 'nowordbound' | 'inputboundstart' | 'inputboundend';
 }
+export function boundary(type: boundary['type']): boundary {
+	return {type};
+}
 
 interface reference {
 	type: 'reference';
 	value: number|string;
 }
+export function reference(value: number|string): reference {
+	return {type: 'reference', value};
+}
 
-type part = text | concatenation | alternation | noncapture | capture | klass | unicode | quantified | boundary | reference;
+type part0 = /*text |*/ concatenation | alternation | noncapture | capture | klass | unicode | quantified | boundary | reference;
+type part = string | part0;
+
+//function is<T extends part0>(part: part, type: T['type']): part is T {
+//	return typeof part !== 'string' && part.type === type;
+//}
+
+function is<T extends part0['type']>(part: part, type: T): part is Extract<part0, { type: T }> {
+	return typeof part !== 'string' && part.type === type;
+}
+
+export function anchored(part: part): part {
+	return concatenation([boundary('inputboundstart'), part, boundary('inputboundend')]);
+}
+
 
 interface PendingGroup {
 	type: 'group';
@@ -238,12 +266,12 @@ export function parse(re: string): part {
 		const c = re[i++];
 		switch (c) {
 			default:	return c;
-			case 'd':	return klass('0123456789');  //digit
-			case 'D':	return negklass('0123456789');  //non-digit
-			case 'w':	return klass('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_');  //word
-			case 'W':	return negklass('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_');  //non-word
-			case 's':	return klass(' \t\r\n\f\v');  //whitespace
-			case 'S':	return negklass(' \t\r\n\f\v');  //non-whitespace
+			case 'd':	return klass.fromString('0123456789');  //digit
+			case 'D':	return klass.fromString('0123456789').complement();  //non-digit
+			case 'w':	return klass.fromString('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_');  //word
+			case 'W':	return klass.fromString('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_').complement();  //non-word
+			case 's':	return klass.fromString(' \t\r\n\f\v');  //whitespace
+			case 'S':	return klass.fromString(' \t\r\n\f\v').complement();  //non-whitespace
 			case 't':	return '\t';  //tab
 			case 'r':	return '\r';  //carriage return
 			case 'n':	return '\n';  //newline
@@ -290,12 +318,21 @@ export function parse(re: string): part {
 		const top = tos.pop();
 		if (!top)
 			throw new Error('nothing to quantify');
-		if (top.type === 'text' && top.value.length > 1) {
+
+		if (typeof top === 'string' && top.length > 1) {
+			tos.push(top.slice(0, -1));
+			tos.push(quantified(top.slice(-1), min, max, greedy));
+		} else {
+			tos.push(quantified(top, min, max, greedy));
+		}
+/*
+		if (typeof top !== 'string' && top.type === 'text' && top.value.length > 1) {
 			tos.push(text(top.value.slice(0, -1)));
 			tos.push(quantified(text(top.value.slice(-1)), min, max, greedy));
 		} else {
 			tos.push(quantified(top, min, max, greedy));
 		}
+			*/
 	}
 
 	const specialChars = /[\\^$*+?{()|[]/;
@@ -305,12 +342,14 @@ export function parse(re: string): part {
 		const next		= remaining.search(specialChars);
 
 		if (next === -1) {
-			tos.push({type: 'text', value: remaining});
+			//tos.push({type: 'text', value: remaining});
+			tos.push(remaining);
 			break;
 		}
 
 		if (next > 0)
-			tos.push({type: 'text', value: remaining.substring(0, next)});
+			//tos.push({type: 'text', value: remaining.substring(0, next)});
+			tos.push(remaining.substring(0, next));
 
 		i += next;
 		const c = re[i++];
@@ -331,7 +370,8 @@ export function parse(re: string): part {
 					tos.push({type: 'reference', value: name});
 				} else {
 					const b = backslashed();
-					tos.push(typeof b === 'string' ? text(b) : b);
+					tos.push(b);
+					//tos.push(typeof b === 'string' ? text(b) : b);
 				}
 				break;
 
@@ -380,7 +420,7 @@ export function parse(re: string): part {
 		//Groups
 			case '(':
 				let group: capture | noncapture;
-				const dummy = text(''); // placeholder
+				const dummy = '';//text(''); // placeholder
 				if (re[i] === '?') {
 					i++;
 					switch (re[i++]) {
@@ -445,7 +485,7 @@ export function parse(re: string): part {
 				if (neg)
 					i++;
 
-				let cs = new CharacterSet(false);
+				let cs = new klass(false);
 				if (re[i] === ']' || re[i] === '-')
 					cs.set(re.charCodeAt(i++));
 
@@ -463,12 +503,12 @@ export function parse(re: string): part {
 						} else {
 							cs.setChar(c);
 						}
-					} else if (c.type === 'class') {
-						cs.union(c.value);
+					} else if (is(c, 'class')) {
+						cs.union(c);
 					}
 				}
 				i++; // skip ']'
-				tos.push({type: 'class', value: neg ? cs.complement() : cs});
+				tos.push(neg ? cs.complement() : cs);
 				break;
 			}
 		}
@@ -488,9 +528,12 @@ export function parse(re: string): part {
 }
 
 export function toRegExpString(part: part): string {
+	if (typeof part === 'string')
+		return part.replace(/[\\^$*+?.()|[\]{}]/g, '\\$&');
+
 	switch (part.type) {
-		case 'text':
-			return part.value.replace(/[\\^$*+?.()|[\]{}]/g, '\\$&');
+		//case 'text':
+		//	return part.value.replace(/[\\^$*+?.()|[\]{}]/g, '\\$&');
 
 		case 'concat':
 			return part.parts.map(p => toRegExpString(p)).join('');
@@ -498,8 +541,19 @@ export function toRegExpString(part: part): string {
 		case 'alt':
 			return part.parts.map(p => {
 				const s = toRegExpString(p);
-				return p.type === 'alt' ? `(?:${s})` : s;
+				return is(p, 'alt') ? `(?:${s})` : s;
 			}).join('|');
+
+		case 'quantified': {
+			let p = toRegExpString(part.part);
+			p	+=	part.min === 0 && part.max === -1 ? '*'
+				:	part.min === 1 && part.max === -1 ? '+'
+				:	part.min === 0 && part.max === 1 ? '?'
+				:	part.max === -1 ? `{${part.min},}`
+				:	part.min === part.max ? `{${part.min}}`
+				:	`{${part.min},${part.max}}`;
+			return p + (part.greedy ? '' : '?');
+		}
 
 		case 'noncapture': {
 			let header = '';
@@ -525,24 +579,13 @@ export function toRegExpString(part: part): string {
 			return `(${part.name ? `?<${part.name}>` : ''}${toRegExpString(part.part)})`;
 
 		case 'class':
-			return `[${part.value.toString()}]`;
+			return `[${part.toString()}]`;
 
 		case 'unicode':
 			return `\\p{${part.property}}`;
 
 		case 'notunicode':
 			return `\\P{${part.property}}`;
-
-		case 'quantified': {
-			let p = toRegExpString(part.part);
-			p	+=	part.min === 0 && part.max === -1 ? '*'
-				:	part.min === 1 && part.max === -1 ? '+'
-				:	part.min === 0 && part.max === 1 ? '?'
-				:	part.max === -1 ? `{${part.min},}`
-				:	part.min === part.max ? `{${part.min}}`
-				:	`{${part.min},${part.max}}`;
-			return p + (part.greedy ? '' : '?');
-		}
 
 		case 'wordbound':
 			return '\\b';
