@@ -9,7 +9,10 @@ export function partition<T, U extends keyof any | boolean>(array: Iterable<T>, 
 	return partitions;
 }
 
-export function lowerBound<T>(array: T[], value: T, func: (a: T, b: T, i: number) => boolean) {
+export function less<T>(a: T, b: T): boolean {
+	return a < b;
+}
+export function lowerBound<T>(array: T[], value: T, func: (a: T, b: T, i: number) => boolean = less) {
 	let i = 0;
 	for (let n = array.length; n; n >>= 1) {
 		const mid = i + (n >> 1);

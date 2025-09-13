@@ -5,7 +5,7 @@ export * from './iterator';
 export * from './string';
 export * from './algorithm';
 
-export * as regexp from './regexp';
+export * as regex from './regex';
 export * as array from './array';
 export * as async from './async';
 export * as insensitive from './insensitive';
