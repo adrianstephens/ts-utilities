@@ -4,8 +4,9 @@ export * from './object';
 export * from './iterator';
 export * from './string';
 export * from './algorithm';
+export * from './glob';
 
-export * as regex from './regex';
+export * as bits from './bits';
 export * as array from './array';
 export * as async from './async';
 export * as insensitive from './insensitive';

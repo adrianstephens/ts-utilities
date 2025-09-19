@@ -1,4 +1,4 @@
-import * as regex from '../src/regex';
+import { DenseBits, highestSet, SparseBits } from '../src/bits';
 
 export interface equal<T> {
 	equal(b: T): boolean;
@@ -22,34 +22,41 @@ export function test(name: string, fn: ()=>void) {
 //test('make', () => {
 //}
 
-const x = regex.parse('.*[^\\D]+');
-console.log(x);
+for (let offset = -100; offset <= 100; offset++)
+	console.log(offset, highestSet((1n<<10n)+BigInt(offset)));
 
-const s = regex.toRegExpString(x);
-console.log(s);
+//const sp = new DenseBits;
+const sp = new SparseBits(false);
+sp.setRange(42, 100);
+sp.clearRange(64, 96);
+sp.set(42);
+sp.set(1000);
+sp.set(10000);
 
-const x2 = regex.parse('this');//|that
-console.log(regex.toRegExpString(x2));
+for (const i of sp) {
+	console.log(i);
+}
 
-const x3 = regex.parse('this(that|other)*end');
-console.log(regex.toRegExpString(x3));
 
-//const x4 = regexp.parse("[😀-😂]", false);
-const x5 = regex.parse("[😀-😂]", true);
+/*
+sp.selfNot();
 
-const t = regex.anchored(regex.capture([
-	'test', x, x2,
-	regex.parse('[A]'),
-	x2, x3,
-	regex.repeatFrom(regex.chars('abcd'), 1),
-	'test2',
-	regex.parse('cat|catch'),
-	regex.parse('catch|cat'),
-	regex.parse('a|b|c|hello|world|x|y|z'),
-	regex.reference(1),
-	regex.reference('name')
-], 'name'));
-console.log(regex.toRegExpString(t));
+for (let i = sp.next(-1, false); i !== -1; i = sp.next(i, false)) {
+	console.log(i);
+}
+*/
+sp.selfComplement();
 
-const t2 = regex.optimize(t);
-console.log(regex.toRegExpString(t2));
+for (const i of sp.ranges()) {
+	console.log(i);
+}
+
+
+for (const i of sp.where(false)) {
+	console.log(i);
+}
+
+
+for (let i = sp.next(-1); i !== -1; i = sp.next(i)) {
+	console.log(i);
+}
