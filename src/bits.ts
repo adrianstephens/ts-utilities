@@ -170,13 +170,68 @@ export function countClear(x: bigint|number): number {
 	return countSet(~x);
 }
 
+//-----------------------------------------------------------------------------
+// interfaces
+//-----------------------------------------------------------------------------
+
+export interface immutableBitSet {
+	// Returns the number of bits set to 1
+	countSet(): number;
+
+	// Returns a new bitset with all bits flipped
+	complement(): this;
+
+	// Returns a new bitset with only the bits set in both this and other
+	intersect(other: this): this;
+
+	// Returns a new bitset with all bits set in either this or other
+	union(other: this): this;
+
+	// Returns a new bitset with bits set in either this or other, but not both
+	xor(other: this): this;
+
+	// Returns true if all bits set in 'other' are also set in this
+	contains(other: this): boolean;
+
+	// Returns true if bit 'a' is set
+	test(a: number): boolean;
+
+	// Returns the next index after 'a' that is set (or clear), or -1 if none
+	next(a: number, set: boolean): number;
+
+	// Returns an iterator over all set (or clear) bits, starting after 'from'
+	where(set: boolean, from?: number): { [Symbol.iterator](): Generator<number> };
+
+	// Returns an iterator over all ranges of set (or clear) bits
+	ranges(): { [Symbol.iterator](): Generator<number[]> };
+}
+
+export interface BitSet extends immutableBitSet {
+	// Sets bit 'a'
+	set(a: number): void;
+
+	// Clears bit 'a'
+	clear(a: number): void;
+
+	// Sets all bits in [a,b)
+	setRange(a: number, b: number): this;
+
+	// Clears all bits in [a,b)
+	clearRange(a: number, b: number): this;
+
+	// In-place versions of complement, intersect, union, xor
+	selfComplement(): this;
+	selfIntersect(other: this): this;
+	selfUnion(other: this): this;
+	selfXor(other: this): this;
+}
 
 //-----------------------------------------------------------------------------
 // SparseBits - a sparse bitset implementation, where each entry in the 'bits' array represents 32 bits
 // The 'undef' member indicates whether undefined entries are treated as 0 or 0xffffffff
 //-----------------------------------------------------------------------------
 
-export class ImmutableSparseBits {
+export class ImmutableSparseBits implements immutableBitSet {
 	protected bits: number[] = [];	//each entry represents 32 bits
 	protected undef: number;
 
@@ -311,8 +366,15 @@ export class ImmutableSparseBits {
 		return true;
 	}
 
-	has(a: number): boolean {
+	test(a: number): boolean {
 		return !!((this.bits[a >> 5] ?? this.undef) & (1 << (a & 0x1f)));
+	}
+
+	countSet(): number {
+		let count = 0;
+		for (const i in this.bits)
+			count += countSet32(this.bits[i]);
+		return count;
 	}
 
 	next(a: number, set = true): number {
@@ -421,7 +483,7 @@ export class ImmutableSparseBits {
 	}
 }
 
-export class SparseBits extends ImmutableSparseBits {
+export class SparseBits extends ImmutableSparseBits implements BitSet {
 
 	private setMask(i: number, m: number) {
 		if (this.bits[i] !== undefined)
@@ -478,7 +540,7 @@ export class SparseBits extends ImmutableSparseBits {
 	clear(a: number) {
 		this.clearMask(a >> 5, 1 << (a & 0x1f));
 	}
-	has(a: number) {
+	test(a: number) {
 		const i = a >> 5;
 		return !!((this.bits[i] ?? this.undef) & (1 << (a & 0x1f)));
 	}
@@ -522,7 +584,7 @@ export class SparseBits extends ImmutableSparseBits {
 //-----------------------------------------------------------------------------
 // DenseBits - a dense bitset implementation using bigint
 //-----------------------------------------------------------------------------
-export class ImmutableDenseBits {
+export class ImmutableDenseBits implements immutableBitSet {
 
 	constructor(protected bits: bigint = 0n) {
 	}
@@ -535,26 +597,34 @@ export class ImmutableDenseBits {
 		return this.create(~this.bits);
 	}
 
-	intersect(other: DenseBits): this {
+	intersect(other: ImmutableDenseBits): this {
 		return this.create(this.bits & other.bits);
 	}
 
-	union(other: DenseBits): this {
+	union(other: ImmutableDenseBits): this {
 		return this.create(this.bits | other.bits);
 	}
 
-	xor(other: DenseBits): this {
+	xor(other: ImmutableDenseBits): this {
 		return this.create(this.bits ^ other.bits);
 	}
 
-	has(a: number) {
+	test(a: number) {
 		return !!(this.bits & (1n << BigInt(a)));
+	}
+
+	contains(other: this): boolean {
+		return (this.bits & other.bits) === other.bits;
 	}
 	
 	next(a: number, set = true): number {
 		let s = this.bits >> BigInt(a + 1);
 		s = set ? s & -s : (s + 1n) & ~s;
 		return s ? a + highestSet(s) : -1;
+	}
+
+	countSet(): number {
+		return countSet(this.bits);
 	}
 
 	get length() {
@@ -617,7 +687,7 @@ export class ImmutableDenseBits {
 	}
 };
 
-export class DenseBits extends ImmutableDenseBits {
+export class DenseBits extends ImmutableDenseBits implements BitSet {
 
 	private setMask(m: bigint) {
 		this.bits |= m;
