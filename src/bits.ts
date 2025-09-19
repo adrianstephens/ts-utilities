@@ -5,20 +5,56 @@ import { lowerBound } from "./algorithm";
 // Bit twiddling functions
 //-----------------------------------------------------------------------------
 
+// Returns the index (0-31) of the lowest set bit, or 32 if none
 export function lowestSet32(x: number): number {
     return x === 0 ? 32 : 31 - Math.clz32(x & -x);
 }
 
+// Returns the index (1-32) of the highest set bit, or 0 if none
 export function highestSet32(x: number): number {
 	return x ? 32 - Math.clz32(x) : 0;
 }
 
+// Returns the number of set bits
 export function countSet32(x: number): number {
 	x = x - ((x >> 1) & 0x55555555)
 	x = (x & 0x33333333) + ((x >> 2) & 0x33333333)
 	return ((x + (x >> 4) & 0xF0F0F0F) * 0x1010101) >> 24
 }
 
+// Returns the index (0-31) of the nth set bit, or 32 if none
+export function nthSet32(x: number, i: number): number {
+	let b2 = x - ((x >> 1) & 0x55555555)
+	let b4 = (b2 & 0x33333333) + ((b2 >> 2) & 0x33333333)
+	let b8 = (b4 + (b4 >> 4) & 0xF0F0F0F);
+	let b16 = (b8 + (b8 >> 8)) & 0xff;
+
+	let n = 0;
+	
+	if (i >= b16) {
+		i -= b16;
+		n += 16;
+	}
+	b8 = (b8 >> n) & 0xff;
+	if (i >= b8) {
+		i -= b8;
+		n += 8;
+	}
+	b4 = (b4 >> n) & 0x0f;
+	if (i >= b4) {
+		i -= b4;
+		n += 4;
+	}
+	b2 = (b2 >> n) & 0x03;
+	if (i >= b2) {
+		i -= b2;
+		n += 2;
+	}
+
+	if (i >= ((x >> n) & 1))
+		++n;
+	return n;
+}
 
 /*
 const testersShift: bigint[] = [];	//32 << i
@@ -81,54 +117,57 @@ export function bitcountCached(x: bigint): number {
 }
 */
 
-export function highestSet(x: bigint|number): number {
-	if (x < 0)
-		x = ~x;
-	
-	if (x < 0x100000000)
-		return highestSet32(Number(x));
-	
-	// For numbers within safe float range, use log2
-	if (x <= Number.MAX_VALUE) {
-		const b = Math.floor(Math.log2(Number(x)));
-		return (1n << BigInt(b)) <= x ? b + 1 : b;
-	}
-	
-	// For arbitrarily large bigints, use bit-shifting method
-	let y = BigInt(x);
+function highestSetBig(x: bigint): number {
 	let s = 0;
 	let k = 0;
 
-	for (let t = y >> 32n; t; t >>= BigInt(s)) {
+	for (let t = x >> 32n; t; t >>= BigInt(s)) {
 		s = 32 << k++;
-		y = t;
+		x = t;
 	}
 
 	if (k) {
 		// determine length by bisection
 		k--;
 		while (k--) {
-			const b = y >> BigInt(32 << k);
+			const b = x >> BigInt(32 << k);
 			if (b) {
 				s += 32 << k;
-				y = b;
+				x = b;
 			}
 		}
 	}
-	return (s + 32) - Math.clz32(Number(y));
+	return (s + 32) - Math.clz32(Number(x));
+}
+
+export function highestSet(x: bigint|number): number {
+	if (x < 0)
+		x = ~x;
+	if (x < 0x100000000)
+		return highestSet32(Number(x));
+	
+	// For < 1024 bits, use log2
+	if (x <= Number.MAX_VALUE) {
+		const b = Math.floor(Math.log2(Number(x)));
+		return (1n << BigInt(b)) <= x ? b + 1 : b;
+	}
+	
+	return highestSetBig(BigInt(x));
 }
 
 export function lowestSet(x: number|bigint): number {
+	if (x < 0)
+		x = ~x;
 	if (x < 0x100000000)
 		return lowestSet32(Number(x));
-	const xb = BigInt(x < 0 ? ~x : x);
-	return highestSet(xb & -xb) - 1;
+
+	x = BigInt(x);
+	return highestSetBig(x & -x) - 1;
 }
 
 export function countSet(x: bigint|number): number {
 	if (x < 0)
 		x = ~x;
-
 	if (x < 0x100000000)
 		return countSet32(Number(x));
 
@@ -140,9 +179,9 @@ export function countSet(x: bigint|number): number {
 	const n			= 1 << k;
 	const limit		= 1n << BigInt(n);
 
-	let i = 1;
-	for (; i < k; i <<= 1) {
-		const bi	= BigInt(i);
+	let s = 1;
+	for (; s < k; s <<= 1) {
+		const bi	= BigInt(s);
 		const mask	= limit / ((1n << bi) + 1n);
 		x = (x & mask) + ((x >> bi) & mask);
 	}
@@ -152,22 +191,75 @@ export function countSet(x: bigint|number): number {
 	//x = (x * mask) >> BigInt(n - i);
 
 	//we can skip the masking when the total can fit
-	for (; i < n; i <<= 1)
-		x += x >> BigInt(i);
+	for (; s < n; s <<= 1)
+		x += x >> BigInt(s);
 
-	return Number(x & 0xFFFFFFFFn);
+	return Number(x & ((1n << BigInt(k)) - 1n));
 }
 
+export function nthSet(x: bigint|number, i: number): number {
+	if (x < 0)
+		x = ~x;
+	if (x < 0x100000000)
+		return nthSet32(Number(x), i);
+
+	x = BigInt(x);
+	let k = 5;
+	for (let t = x >> 32n; t;)
+		t >>= BigInt(1 << k++);
+
+	const limit		= 1n << BigInt(1 << k);
+	const counts: bigint[] = [];
+	counts.push(x);
+	
+	let s = 1;
+	for (; s < k; s <<= 1) {
+		const bi	= BigInt(s);
+		const mask	= limit / ((1n << bi) + 1n);
+		x = (x & mask) + ((x >> bi) & mask);
+		counts.push(x);
+	}
+	while (counts.length < k) {
+		x += x >> BigInt(s);
+		counts.push(x);
+		s <<= 1;
+	}
+
+	let n = 0;
+	for (let j = k; j--;) {
+		const s = 1 << j;
+		const b = Number((counts[j] >> BigInt(n)) & 0xffffffffn) & (s * 2 - 1);
+
+		if (i >= b) {
+			i -= b;
+			n += s;
+		}
+	}
+
+	return n;
+}
+
+// Returns the index of the highest clear bit
 export function highestClear(x: number|bigint): number {
 	return highestSet(~x);
 }
 
+// Returns the index of the lowest clear bit
 export function lowestClear(x: number|bigint): number {
 	return lowestSet(~x);
 }
 
+// Returns the number of clear bits
 export function countClear(x: bigint|number): number {
 	return countSet(~x);
+}
+
+// Clears the lowest set bit
+export function clearLowest(x: bigint): bigint;
+export function clearLowest(x: number): number;
+export function clearLowest(x: bigint|number): bigint|number;
+export function clearLowest(x: bigint|number): bigint|number {
+	return typeof x === 'bigint' ? x & (x - 1n) : x & (x - 1);
 }
 
 //-----------------------------------------------------------------------------
@@ -175,8 +267,14 @@ export function countClear(x: bigint|number): number {
 //-----------------------------------------------------------------------------
 
 export interface immutableBitSet {
+	// Returns true if bit 'a' is set
+	test(a: number): boolean;
+
 	// Returns the number of bits set to 1
 	countSet(): number;
+
+	// Returns the index of the 'a'th set bit
+	nthSet(a: number): number;
 
 	// Returns a new bitset with all bits flipped
 	complement(): this;
@@ -193,9 +291,6 @@ export interface immutableBitSet {
 	// Returns true if all bits set in 'other' are also set in this
 	contains(other: this): boolean;
 
-	// Returns true if bit 'a' is set
-	test(a: number): boolean;
-
 	// Returns the next index after 'a' that is set (or clear), or -1 if none
 	next(a: number, set: boolean): number;
 
@@ -204,6 +299,8 @@ export interface immutableBitSet {
 
 	// Returns an iterator over all ranges of set (or clear) bits
 	ranges(): { [Symbol.iterator](): Generator<number[]> };
+
+	[Symbol.iterator](): Generator<number>;
 }
 
 export interface BitSet extends immutableBitSet {
@@ -320,6 +417,45 @@ export class ImmutableSparseBits implements immutableBitSet {
 		return Object.entries(this.bits).map(([k, v]) => [+k, v]);
 	}
 
+	test(a: number): boolean {
+		return !!((this.bits[a >> 5] ?? this.undef) & (1 << (a & 0x1f)));
+	}
+
+	countSet(): number {
+		let count = 0;
+		for (const i in this.bits)
+			count += countSet32(this.bits[i]);
+		return count;
+	}
+
+	nthSet(a: number): number {
+		if (this.undef === 0) {
+			for (const i in this.bits) {
+				const v = this.bits[i];
+				const n = countSet32(v);
+				if (a < n)
+					return (+i << 5) + nthSet32(v, a);
+				a -= n;
+			}
+		} else {
+			let prev = 0;
+			for (const i in this.bits) {
+				const m = (+i - prev) << 5;
+				if (a < m)
+					return (prev << 5) + a;
+				a -= m;
+
+				const v = this.bits[i];
+				const n = countSet32(v);
+				if (a < n)
+					return (+i << 5) + nthSet32(v, a);
+				a -= n;
+				prev = +i + 1;
+			}
+		}
+		return -1;
+	}
+
 	complement(): this {
 		const result = this.create(this.undef === 0);
 		for (const i in this.bits)
@@ -348,14 +484,6 @@ export class ImmutableSparseBits implements immutableBitSet {
 		return this.undef ? result.flipUndefined(other) : result.copyUndefined(other);
 	}
 
-	clean(): this {
-		for (const i in this.bits) {
-			if (this.bits[i] === this.undef)
-				delete this.bits[i];
-		}
-		return this;
-	}
-
 	contains(other: ImmutableSparseBits): boolean {
 		if (other.undef && !this.undef)
 			return false;
@@ -366,16 +494,6 @@ export class ImmutableSparseBits implements immutableBitSet {
 		return true;
 	}
 
-	test(a: number): boolean {
-		return !!((this.bits[a >> 5] ?? this.undef) & (1 << (a & 0x1f)));
-	}
-
-	countSet(): number {
-		let count = 0;
-		for (const i in this.bits)
-			count += countSet32(this.bits[i]);
-		return count;
-	}
 
 	next(a: number, set = true): number {
 		++a;
@@ -417,19 +535,6 @@ export class ImmutableSparseBits implements immutableBitSet {
 			}
 			return (i << 5) + lowestSet32(~v);
 		}
-	}
-
-	toDense(): DenseBits {
-		let bits = 0n;
-		if (this.undef) {
-			for (const i in this.bits)
-				bits |= BigInt(~this.bits[i]) << BigInt(+i * 32);
-			bits = ~bits;
-		} else {
-			for (const i in this.bits)
-				bits |= BigInt(this.bits[i]) << BigInt(+i * 32);
-		}
-		return new DenseBits(bits);
 	}
 
 	where(set: boolean, from = -1) {
@@ -481,10 +586,31 @@ export class ImmutableSparseBits implements immutableBitSet {
 		//for (let i = this.next(-1); i !== -1; i = this.next(i))
 		//	yield i;
 	}
+
+	clean(): this {
+		for (const i in this.bits) {
+			if (this.bits[i] === this.undef)
+				delete this.bits[i];
+		}
+		return this;
+	}
+
+
+	toDense(): DenseBits {
+		let bits = 0n;
+		if (this.undef) {
+			for (const i in this.bits)
+				bits |= BigInt(~this.bits[i]) << BigInt(+i * 32);
+			bits = ~bits;
+		} else {
+			for (const i in this.bits)
+				bits |= BigInt(this.bits[i]) << BigInt(+i * 32);
+		}
+		return new DenseBits(bits);
+	}
 }
 
 export class SparseBits extends ImmutableSparseBits implements BitSet {
-
 	private setMask(i: number, m: number) {
 		if (this.bits[i] !== undefined)
 			this.bits[i] |= m;
@@ -496,6 +622,48 @@ export class SparseBits extends ImmutableSparseBits implements BitSet {
 			this.bits[i] &= ~m;
 		else if (this.undef)
 			this.bits[i] = ~m;
+	}
+
+	set(a: number) {
+		this.setMask(a >> 5, 1 << (a & 0x1f));
+	}
+	clear(a: number) {
+		this.clearMask(a >> 5, 1 << (a & 0x1f));
+	}
+
+	setRange(a: number, b: number) {
+		let i = a >> 5, j = b >> 5;
+		if (i === j) {
+			this.setMask(i, (1 << (b & 0x1f)) - (1 << (a & 0x1f)));
+		} else {
+			this.setMask(i++, -(1 << (a & 0x1f)));
+			if (this.undef) {
+				while (i < j)
+					delete this.bits[i++];
+			} else {
+				while (i < j)
+					this.bits[i++] = -1;
+			}
+			this.setMask(i, (1 << (b & 0x1f)) - 1);
+		}
+		return this;
+	}
+	clearRange(a: number, b: number) {
+		let i = a >> 5, j = b >> 5;
+		if (i === j) {
+			this.clearMask(i, (1 << (b & 0x1f)) - (1 << (a & 0x1f)));
+		} else {
+			this.clearMask(i++, -(1 << (a & 0x1f)));
+			if (!this.undef) {
+				while (i < j)
+					delete this.bits[i++];
+			} else {
+				while (i < j)
+					this.bits[i++] = 0;
+			}
+			this.clearMask(i, (1 << (b & 0x1f)) - 1);
+		}
+		return this;
 	}
 
 	selfComplement(): this {
@@ -533,52 +701,6 @@ export class SparseBits extends ImmutableSparseBits implements BitSet {
 		this.undef &= other.undef;
 		return this;
 	}
-
-	set(a: number) {
-		this.setMask(a >> 5, 1 << (a & 0x1f));
-	}
-	clear(a: number) {
-		this.clearMask(a >> 5, 1 << (a & 0x1f));
-	}
-	test(a: number) {
-		const i = a >> 5;
-		return !!((this.bits[i] ?? this.undef) & (1 << (a & 0x1f)));
-	}
-
-	setRange(a: number, b: number) {
-		let i = a >> 5, j = b >> 5;
-		if (i === j) {
-			this.setMask(i, (1 << (b & 0x1f)) - (1 << (a & 0x1f)));
-		} else {
-			this.setMask(i++, -(1 << (a & 0x1f)));
-			if (this.undef) {
-				while (i < j)
-					delete this.bits[i++];
-			} else {
-				while (i < j)
-					this.bits[i++] = -1;
-			}
-			this.setMask(i, (1 << (b & 0x1f)) - 1);
-		}
-		return this;
-	}
-	clearRange(a: number, b: number) {
-		let i = a >> 5, j = b >> 5;
-		if (i === j) {
-			this.clearMask(i, (1 << (b & 0x1f)) - (1 << (a & 0x1f)));
-		} else {
-			this.clearMask(i++, -(1 << (a & 0x1f)));
-			if (!this.undef) {
-				while (i < j)
-					delete this.bits[i++];
-			} else {
-				while (i < j)
-					this.bits[i++] = 0;
-			}
-			this.clearMask(i, (1 << (b & 0x1f)) - 1);
-		}
-		return this;
-	}
 };
 
 //-----------------------------------------------------------------------------
@@ -591,6 +713,22 @@ export class ImmutableDenseBits implements immutableBitSet {
 
 	protected create(bits?: bigint): this {
 		return new (this.constructor as new (bits?: bigint) => this)(bits);
+	}
+
+	get length() {
+		return highestSet(this.bits);
+	}
+
+	test(a: number) {
+		return !!(this.bits & (1n << BigInt(a)));
+	}
+
+	countSet(): number {
+		return countSet(this.bits);
+	}
+	
+	nthSet(a: number): number {
+		return nthSet(this.bits, a);
 	}
 
 	complement(): this {
@@ -609,10 +747,6 @@ export class ImmutableDenseBits implements immutableBitSet {
 		return this.create(this.bits ^ other.bits);
 	}
 
-	test(a: number) {
-		return !!(this.bits & (1n << BigInt(a)));
-	}
-
 	contains(other: this): boolean {
 		return (this.bits & other.bits) === other.bits;
 	}
@@ -621,14 +755,6 @@ export class ImmutableDenseBits implements immutableBitSet {
 		let s = this.bits >> BigInt(a + 1);
 		s = set ? s & -s : (s + 1n) & ~s;
 		return s ? a + highestSet(s) : -1;
-	}
-
-	countSet(): number {
-		return countSet(this.bits);
-	}
-
-	get length() {
-		return highestSet(this.bits);
 	}
 
 	where(set: boolean, from = -1) {
@@ -688,13 +814,28 @@ export class ImmutableDenseBits implements immutableBitSet {
 };
 
 export class DenseBits extends ImmutableDenseBits implements BitSet {
-
-	private setMask(m: bigint) {
+	protected setMask(m: bigint) {
 		this.bits |= m;
 	}
-	private clearMask(m: bigint) {
+	protected clearMask(m: bigint) {
 		this.bits &= ~m;
 	}
+	set(a: number) {
+		this.setMask(1n << BigInt(a));
+	}
+	clear(a: number) {
+		this.clearMask(1n << BigInt(a));
+	}
+	
+	setRange(a: number, b: number) {
+		this.setMask((1n << BigInt(b)) - (1n << BigInt(a)));
+		return this;
+	}
+	clearRange(a: number, b: number) {
+		this.clearMask((1n << BigInt(b)) - (1n << BigInt(a)));
+		return this;
+	}
+
 	selfComplement(): this {
 		this.bits = ~this.bits;
 		return this;
@@ -714,21 +855,4 @@ export class DenseBits extends ImmutableDenseBits implements BitSet {
 		this.bits ^= other.bits;
 		return this;
 	}
-
-	set(a: number) {
-		this.setMask(1n << BigInt(a));
-	}
-	clear(a: number) {
-		this.clearMask(1n << BigInt(a));
-	}
-	
-	setRange(a: number, b: number) {
-		this.setMask((1n << BigInt(b)) - (1n << BigInt(a)));
-		return this;
-	}
-	clearRange(a: number, b: number) {
-		this.clearMask((1n << BigInt(b)) - (1n << BigInt(a)));
-		return this;
-	}
-
 };

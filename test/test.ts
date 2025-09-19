@@ -1,4 +1,4 @@
-import { DenseBits, highestSet, SparseBits } from '../src/bits';
+import { clearLowest, countSet, DenseBits, highestSet, lowestSet, lowestSet32, nthSet, nthSet32, SparseBits } from '../src/bits';
 
 export interface equal<T> {
 	equal(b: T): boolean;
@@ -21,6 +21,20 @@ export function test(name: string, fn: ()=>void) {
 
 //test('make', () => {
 //}
+
+const x = (1n << 100n) / 15n;//0x12345678;
+const n = countSet(x);
+for (let i = x, j = 0; i; i = clearLowest(i)) {
+	const bit = lowestSet(i);
+	console.log(j++, bit);
+}
+
+console.log('---');
+
+for (let i = 0; i < n; i++) {
+	const bit = nthSet(x, i);
+	console.log(i, bit);
+}
 
 for (let offset = -100; offset <= 100; offset++)
 	console.log(offset, highestSet((1n<<10n)+BigInt(offset)));
