@@ -1,4 +1,4 @@
-import { clearLowest, countSet, DenseBits, highestSet, lowestSet, lowestSet32, nthSet, nthSet32, SparseBits } from '../src/bits';
+import * as bits from '../src/bits';
 
 export interface equal<T> {
 	equal(b: T): boolean;
@@ -19,28 +19,54 @@ export function test(name: string, fn: ()=>void) {
 	console.log("finished: " + name);
 }
 
-//test('make', () => {
-//}
-
-const x = (1n << 100n) / 15n;//0x12345678;
-const n = countSet(x);
-for (let i = x, j = 0; i; i = clearLowest(i)) {
-	const bit = lowestSet(i);
-	console.log(j++, bit);
+function timed(name: string, fn: ()=>void) {
+	console.log("timed: " + name);
+	const start = Date.now();
+	fn();
+	const end = Date.now();
+	console.log("finished: " + name + " in " + (end - start) + "ms");
 }
 
-console.log('---');
+function highestSet1024(x: bigint): number {
+	let s = 0;
+	let k = 0;
 
-for (let i = 0; i < n; i++) {
-	const bit = nthSet(x, i);
-	console.log(i, bit);
+	for (let t = x >> 1024n; t; t >>= BigInt(s)) {
+		s = 1024 << k++;
+		x = t;
+	}
+
+	if (k) {
+		// determine length by bisection
+		k--;
+		while (k--) {
+			const b = x >> BigInt(1024 << k);
+			if (b) {
+				s += 1024 << k;
+				x = b;
+			}
+		}
+	}
+
+	const y = Number(x);
+	let b = Math.floor(Math.log2(y));
+	if (1n << BigInt(b) <= x)
+		++b;
+	return s + b;
+
+//	return (s + 1024) - Math.clz32(Number(x));
 }
 
-for (let offset = -100; offset <= 100; offset++)
-	console.log(offset, highestSet((1n<<10n)+BigInt(offset)));
+for (let i = 0; i < 50; i++) {
+	const n = Math.floor(Math.pow(1.5, i));
+	const j = bits.lowestSet(1n << BigInt(n));
+	console.log(i, j);
+	if (j !== n)
+		console.log('error');
+}
 
 //const sp = new DenseBits;
-const sp = new SparseBits(false);
+const sp = new bits.SparseBits2();
 sp.setRange(42, 100);
 sp.clearRange(64, 96);
 sp.set(42);

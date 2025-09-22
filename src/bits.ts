@@ -1,6 +1,3 @@
-
-import { lowerBound } from "./algorithm";
-
 //-----------------------------------------------------------------------------
 // Bit twiddling functions
 //-----------------------------------------------------------------------------
@@ -13,6 +10,11 @@ export function lowestSet32(x: number): number {
 // Returns the index (1-32) of the highest set bit, or 0 if none
 export function highestSet32(x: number): number {
 	return x ? 32 - Math.clz32(x) : 0;
+}
+
+export function highestSet1024(x: number): number {
+	let b = Math.floor(Math.log2(x));
+	return 1n << BigInt(b) <= x ? b + 1 : b;
 }
 
 // Returns the number of set bits
@@ -117,7 +119,8 @@ export function bitcountCached(x: bigint): number {
 }
 */
 
-function highestSetBig(x: bigint): number {
+/*
+function highestSetBig32(x: bigint): number {
 	let s = 0;
 	let k = 0;
 
@@ -127,42 +130,55 @@ function highestSetBig(x: bigint): number {
 	}
 
 	if (k) {
-		// determine length by bisection
-		k--;
-		while (k--) {
-			const b = x >> BigInt(32 << k);
+		while (--k) {
+			const b = x >> BigInt(16 << k);
 			if (b) {
-				s += 32 << k;
+				s += 16 << k;
 				x = b;
 			}
 		}
 	}
 	return (s + 32) - Math.clz32(Number(x));
 }
+*/
+
+function highestSetBig1024(x: bigint): number {
+	let s = 0;
+	let k = 0;
+
+	for (let t = x >> 1024n; t; t >>= BigInt(s)) {
+		s = 1024 << k++;
+		x = t;
+	}
+
+	if (k) {
+		while (--k) {
+			const b = x >> BigInt(512 << k);
+			if (b) {
+				s += 512 << k;
+				x = b;
+			}
+		}
+	}
+
+	return highestSet1024(Number(x)) + s;
+}
 
 export function highestSet(x: bigint|number): number {
 	if (x < 0)
 		x = ~x;
-	if (x < 0x100000000)
-		return highestSet32(Number(x));
-	
-	// For < 1024 bits, use log2
-	if (x <= Number.MAX_VALUE) {
-		const b = Math.floor(Math.log2(Number(x)));
-		return (1n << BigInt(b)) <= x ? b + 1 : b;
-	}
-	
-	return highestSetBig(BigInt(x));
+
+	return	x < 0x100000000			? highestSet32(Number(x))
+		:	x <= Number.MAX_VALUE	? highestSet1024(Number(x))
+		:	highestSetBig1024(BigInt(x));
 }
 
 export function lowestSet(x: number|bigint): number {
-	if (x < 0)
-		x = ~x;
-	if (x < 0x100000000)
-		return lowestSet32(Number(x));
-
-	x = BigInt(x);
-	return highestSetBig(x & -x) - 1;
+	if (typeof x === 'number') {
+		x = x < 0 ? (~x & (x + 1)) : x & -x;
+		return	(x < 0x100000000 ? highestSet32(x) : highestSet1024(x)) - 1;
+	}
+	return	highestSetBig1024(x < 0 ? (~x & (x + 1n)) : x & -x) - 1;
 }
 
 export function countSet(x: bigint|number): number {
@@ -266,7 +282,7 @@ export function clearLowest(x: bigint|number): bigint|number {
 // interfaces
 //-----------------------------------------------------------------------------
 
-export interface immutableBitSet {
+export interface ImmutableBitSet {
 	// Returns true if bit 'a' is set
 	test(a: number): boolean;
 
@@ -277,16 +293,16 @@ export interface immutableBitSet {
 	nthSet(a: number): number;
 
 	// Returns a new bitset with all bits flipped
-	complement(): this;
+	complement(): ImmutableBitSet;
 
 	// Returns a new bitset with only the bits set in both this and other
-	intersect(other: this): this;
+	intersect(other: this): ImmutableBitSet;
 
 	// Returns a new bitset with all bits set in either this or other
-	union(other: this): this;
+	union(other: this): ImmutableBitSet;
 
 	// Returns a new bitset with bits set in either this or other, but not both
-	xor(other: this): this;
+	xor(other: this): ImmutableBitSet;
 
 	// Returns true if all bits set in 'other' are also set in this
 	contains(other: this): boolean;
@@ -295,15 +311,17 @@ export interface immutableBitSet {
 	next(a: number, set: boolean): number;
 
 	// Returns an iterator over all set (or clear) bits, starting after 'from'
-	where(set: boolean, from?: number): { [Symbol.iterator](): Generator<number> };
+	where(set: boolean, from?: number, to?: number): { [Symbol.iterator](): Generator<number> };
 
 	// Returns an iterator over all ranges of set (or clear) bits
 	ranges(): { [Symbol.iterator](): Generator<number[]> };
 
+	slice(from: number, to?: number): ImmutableBitSet;
+
 	[Symbol.iterator](): Generator<number>;
 }
 
-export interface BitSet extends immutableBitSet {
+export interface BitSet extends ImmutableBitSet {
 	// Sets bit 'a'
 	set(a: number): void;
 
@@ -317,448 +335,58 @@ export interface BitSet extends immutableBitSet {
 	clearRange(a: number, b: number): this;
 
 	// In-place versions of complement, intersect, union, xor
-	selfComplement(): this;
+	selfComplement?(): this;
 	selfIntersect(other: this): this;
 	selfUnion(other: this): this;
 	selfXor(other: this): this;
 }
 
 //-----------------------------------------------------------------------------
-// SparseBits - a sparse bitset implementation, where each entry in the 'bits' array represents 32 bits
-// The 'undef' member indicates whether undefined entries are treated as 0 or 0xffffffff
-//-----------------------------------------------------------------------------
-
-export class ImmutableSparseBits implements immutableBitSet {
-	protected bits: number[] = [];	//each entry represents 32 bits
-	protected undef: number;
-
-
-	static *whereGenerator(bits: number[], undef: number, set: boolean, from = -1): Generator<number> {
-		++from;
-
-		if (undef ? !set : set) {
-			const keys = Object.keys(bits).map(k => +k);
-			if (keys.length === 0)
-				return;
-
-			const i = from >> 5;
-			let k = lowerBound(keys, i);
-			let v = bits[keys[k]] ^ undef;
-			if (keys[k] === i)
-				v &= -(1 << (from & 0x1f));
-
-			for (;;) {
-				const i = keys[k];
-				while (v) {
-					yield (i << 5) + lowestSet32(v);
-					v = v & (v - 1);
-				}
-				++k;
-				if (k === keys.length)
-					return;
-				v = bits[keys[k]] ^ undef;
-			}
-
-		} else  {
-			let i = from >> 5;
-			let v = ((bits[i] ?? undef) ^ ~undef) & -(1 << (from & 0x1f));
-			for (;;) {
-				while (v) {
-					yield (i << 5) + lowestSet32(v);
-					v = v & (v - 1);
-				}
-				++i;
-				v = ((bits[i] ?? undef) ^ ~undef);
-			}
-		}
-	}
-
-
-	constructor(initial = false) {
-		this.undef = initial ? -1 : 0;
-	}
-
-	protected create(init?: boolean): this {
-		return new (this.constructor as new (init?: boolean) => this)(init);
-	}
-
-	protected copyUndefined(other: ImmutableSparseBits): this {
-		for (const i in other.bits) {
-			if (this.bits[i] === undefined)
-				this.bits[i] = other.bits[i];
-		}
-		return this;
-	}
-	protected flipUndefined(other: ImmutableSparseBits): this {
-		for (const i in other.bits) {
-			if (this.bits[i] === undefined)
-				this.bits[i] = ~other.bits[i];
-		}
-		return this;
-	}
-
-	static fromEntries<T extends ImmutableSparseBits>(this: new (initial?: boolean) => T, entries: Record<number, number> | [number, number][], initial = false): T {
-		const r = new this(initial);
-		if (Array.isArray(entries)) {
-			for (const [k, v] of entries)
-				r.bits[k] = v;
-		} else {
-			for (const [k, v] of Object.entries(entries))
-				r.bits[+k] = v;
-		}
-		return r;
-	}
-	
-	keys() {
-		return Object.keys(this.bits).map(k => +k);
-	}
-	entries(): [number, number][] {
-		//return this.bits;
-		return Object.entries(this.bits).map(([k, v]) => [+k, v]);
-	}
-
-	test(a: number): boolean {
-		return !!((this.bits[a >> 5] ?? this.undef) & (1 << (a & 0x1f)));
-	}
-
-	countSet(): number {
-		let count = 0;
-		for (const i in this.bits)
-			count += countSet32(this.bits[i]);
-		return count;
-	}
-
-	nthSet(a: number): number {
-		if (this.undef === 0) {
-			for (const i in this.bits) {
-				const v = this.bits[i];
-				const n = countSet32(v);
-				if (a < n)
-					return (+i << 5) + nthSet32(v, a);
-				a -= n;
-			}
-		} else {
-			let prev = 0;
-			for (const i in this.bits) {
-				const m = (+i - prev) << 5;
-				if (a < m)
-					return (prev << 5) + a;
-				a -= m;
-
-				const v = this.bits[i];
-				const n = countSet32(v);
-				if (a < n)
-					return (+i << 5) + nthSet32(v, a);
-				a -= n;
-				prev = +i + 1;
-			}
-		}
-		return -1;
-	}
-
-	complement(): this {
-		const result = this.create(this.undef === 0);
-		for (const i in this.bits)
-			result.bits[i] = ~this.bits[i];
-		return result;
-	}
-
-	intersect(other: ImmutableSparseBits): this {
-		const result	= this.create(!!(this.undef & other.undef));
-		for (const i in this.bits)
-			result.bits[i] = this.bits[i] & other.bits[i];
-		return this.undef ? result.copyUndefined(other) : result;
-	}
-
-	union(other: ImmutableSparseBits): this {
-		const result	= this.create(!!(this.undef | other.undef));
-		for (const i in other.bits)
-			result.bits[i] = this.bits[i] | other.bits[i];
-		return this.undef ? result : result.copyUndefined(other);
-	}
-
-	xor(other: ImmutableSparseBits): this {
-		const result	= this.create(!!(this.undef ^ other.undef));
-		for (const i in this.bits)
-			result.bits[i] = this.bits[i] ^ other.bits[i];
-		return this.undef ? result.flipUndefined(other) : result.copyUndefined(other);
-	}
-
-	contains(other: ImmutableSparseBits): boolean {
-		if (other.undef && !this.undef)
-			return false;
-		for (const i in other.bits) {
-			if (other.bits[i] & ~(this.bits[i] ?? this.undef))
-				return false;
-		}
-		return true;
-	}
-
-
-	next(a: number, set = true): number {
-		++a;
-
-		const xor = this.undef;
-		if (xor)
-			set = !set;
-
-		if (set) {
-			const keys = Object.keys(this.bits).map(k => +k);
-			if (keys.length === 0)
-				return -1;
-			
-			const ai = a >> 5;
-			let i = lowerBound(keys, ai);
-			let v = this.bits[keys[i]] ^ xor;
-			if (keys[i] === ai)
-				v &= -(1 << (a & 0x1f));
-
-			while (!v) {
-				++i;
-				if (i === keys.length)
-					return -1;
-				v = this.bits[keys[i]] ^ xor;
-			}
-
-			return (keys[i] << 5) + lowestSet32(v);
-
-		} else  {
-			let i = a >> 5;
-			if (this.bits[i] === undefined)
-				return a;
-			let v = (this.bits[i] ^ xor) | ((1 << (a & 0x1f)) - 1);
-			while (!v) {
-				++i;
-				if (this.bits[i] === undefined)
-					break;
-				v = this.bits[i] ^ xor;
-			}
-			return (i << 5) + lowestSet32(~v);
-		}
-	}
-
-	where(set: boolean, from = -1) {
-		return {
-			[Symbol.iterator]: () => ImmutableSparseBits.whereGenerator(this.bits, this.undef, set, from)
-		};
-	}
-
-	ranges() {
-		const bits = this.bits;
-		const undef = this.undef;
-		return {
-			*[Symbol.iterator](): Generator<number[]> {
-				let start = -1, end = 0;
-
-				for (const i in bits) {
-					let b = bits[i] ^ undef;
-					const c0 = +i * 32;
-
-					while ((start < 0 ? b : ~b) !== 0) {
-						if (start === -1) {
-							start = c0 + lowestSet32(b);
-							if (undef)
-								yield [end, start];
-							end = -1;
-							b = b | (b - 1);
-						} else {
-							end = c0 + lowestSet32(~b);
-							if (!undef)
-								yield [start, end];
-							start = -1;
-							b = b & (b + 1);
-						}
-					}
-					if (start >= 0 && bits[+i + 1] === undefined) {
-						if (!undef)
-							yield [start, c0 + 32];
-						start = -1;
-					}
-				}
-				if (undef)
-					yield [end, Infinity];
-			}
-		};
-	}
-
-	*[Symbol.iterator](): Generator<number> {
-		yield* ImmutableSparseBits.whereGenerator(this.bits, this.undef, true, -1);
-		//for (let i = this.next(-1); i !== -1; i = this.next(i))
-		//	yield i;
-	}
-
-	clean(): this {
-		for (const i in this.bits) {
-			if (this.bits[i] === this.undef)
-				delete this.bits[i];
-		}
-		return this;
-	}
-
-
-	toDense(): DenseBits {
-		let bits = 0n;
-		if (this.undef) {
-			for (const i in this.bits)
-				bits |= BigInt(~this.bits[i]) << BigInt(+i * 32);
-			bits = ~bits;
-		} else {
-			for (const i in this.bits)
-				bits |= BigInt(this.bits[i]) << BigInt(+i * 32);
-		}
-		return new DenseBits(bits);
-	}
-}
-
-export class SparseBits extends ImmutableSparseBits implements BitSet {
-	private setMask(i: number, m: number) {
-		if (this.bits[i] !== undefined)
-			this.bits[i] |= m;
-		else if (!this.undef)
-			this.bits[i] = m;
-	}
-	private clearMask(i: number, m: number) {
-		if (this.bits[i] !== undefined)
-			this.bits[i] &= ~m;
-		else if (this.undef)
-			this.bits[i] = ~m;
-	}
-
-	set(a: number) {
-		this.setMask(a >> 5, 1 << (a & 0x1f));
-	}
-	clear(a: number) {
-		this.clearMask(a >> 5, 1 << (a & 0x1f));
-	}
-
-	setRange(a: number, b: number) {
-		let i = a >> 5, j = b >> 5;
-		if (i === j) {
-			this.setMask(i, (1 << (b & 0x1f)) - (1 << (a & 0x1f)));
-		} else {
-			this.setMask(i++, -(1 << (a & 0x1f)));
-			if (this.undef) {
-				while (i < j)
-					delete this.bits[i++];
-			} else {
-				while (i < j)
-					this.bits[i++] = -1;
-			}
-			this.setMask(i, (1 << (b & 0x1f)) - 1);
-		}
-		return this;
-	}
-	clearRange(a: number, b: number) {
-		let i = a >> 5, j = b >> 5;
-		if (i === j) {
-			this.clearMask(i, (1 << (b & 0x1f)) - (1 << (a & 0x1f)));
-		} else {
-			this.clearMask(i++, -(1 << (a & 0x1f)));
-			if (!this.undef) {
-				while (i < j)
-					delete this.bits[i++];
-			} else {
-				while (i < j)
-					this.bits[i++] = 0;
-			}
-			this.clearMask(i, (1 << (b & 0x1f)) - 1);
-		}
-		return this;
-	}
-
-	selfComplement(): this {
-		this.undef = ~this.undef;
-		for (const i in this.bits)
-			this.bits[i] = ~this.bits[i];
-		return this;
-	}
-
-	selfIntersect(other: SparseBits): this {
-		for (const i in this.bits)
-			this.bits[i] &= other.bits[i];
-		if (this.undef)
-			this.copyUndefined(other);
-		this.undef &= other.undef;
-		return this;
-	}
-
-	selfUnion(other: SparseBits): this {
-		for (const i in other.bits)
-			this.bits[i] |= other.bits[i];
-		if (!this.undef)
-			this.copyUndefined(other);
-		this.undef |= other.undef;
-		return this;
-	}
-
-	selfXor(other: SparseBits): this {
-		for (const i in this.bits)
-			this.bits[i] ^= other.bits[i];
-		if (this.undef)
-			this.flipUndefined(other);
-		else
-			this.copyUndefined(other);
-		this.undef &= other.undef;
-		return this;
-	}
-};
-
-//-----------------------------------------------------------------------------
 // DenseBits - a dense bitset implementation using bigint
 //-----------------------------------------------------------------------------
-export class ImmutableDenseBits implements immutableBitSet {
+export class ImmutableDenseBits implements ImmutableBitSet {
 
 	constructor(protected bits: bigint = 0n) {
 	}
-
 	protected create(bits?: bigint): this {
 		return new (this.constructor as new (bits?: bigint) => this)(bits);
 	}
-
 	get length() {
 		return highestSet(this.bits);
 	}
-
 	test(a: number) {
 		return !!(this.bits & (1n << BigInt(a)));
 	}
-
 	countSet(): number {
 		return countSet(this.bits);
 	}
-	
 	nthSet(a: number): number {
 		return nthSet(this.bits, a);
 	}
-
 	complement(): this {
 		return this.create(~this.bits);
 	}
-
 	intersect(other: ImmutableDenseBits): this {
 		return this.create(this.bits & other.bits);
 	}
-
 	union(other: ImmutableDenseBits): this {
 		return this.create(this.bits | other.bits);
 	}
-
 	xor(other: ImmutableDenseBits): this {
 		return this.create(this.bits ^ other.bits);
 	}
-
 	contains(other: this): boolean {
 		return (this.bits & other.bits) === other.bits;
 	}
-	
 	next(a: number, set = true): number {
 		let s = this.bits >> BigInt(a + 1);
 		s = set ? s & -s : (s + 1n) & ~s;
 		return s ? a + highestSet(s) : -1;
 	}
-
-	where(set: boolean, from = -1) {
+	where(set: boolean, from = -1, to?: number) {
 		let bits = this.bits >> BigInt(from + 1);
+		if (to !== undefined)
+			bits &= (1n << BigInt(to - from - 1)) - 1n;
 		return {
 			*[Symbol.iterator](): Generator<number> {
 				while (bits) {
@@ -769,15 +397,6 @@ export class ImmutableDenseBits implements immutableBitSet {
 				}
 			}
 		};
-		/*
-		const self = this;
-		return {
-			*[Symbol.iterator](): Generator<number> {
-				for (let i = self.next(-1, set); i !== -1; i = self.next(i, set))
-					yield i;
-			}
-		};
-		*/
 	}
 	ranges() {
 		let bits = this.bits;
@@ -798,18 +417,22 @@ export class ImmutableDenseBits implements immutableBitSet {
 
 	*[Symbol.iterator](): Generator<number> {
 		yield* this.where(true);
-		//for (let i = this.next(-1); i !== -1; i = this.next(i))
-		//	yield i;
 	}
 
-	toSparse(): SparseBits {
+	toSparse(): SparseBits2 {
 		const sparse: Record<number, number> = {};
 		for (let bits = this.bits, i = 0; bits; bits >>= 32n, i++) {
 			const v = Number(bits & 0xffffffffn);
 			if (v)
 				sparse[i] = v;
 		}
-		return SparseBits.fromEntries(sparse, false);
+		return SparseBits2.fromEntries(sparse, false);
+	}
+
+	slice(from: number, to?: number): ImmutableBitSet {
+		return to === undefined
+			? this.create(this.bits >> BigInt(from))
+			: this.create(this.bits >> BigInt(from) & ((1n << BigInt(to - from)) - 1n));
 	}
 };
 
@@ -826,7 +449,6 @@ export class DenseBits extends ImmutableDenseBits implements BitSet {
 	clear(a: number) {
 		this.clearMask(1n << BigInt(a));
 	}
-	
 	setRange(a: number, b: number) {
 		this.setMask((1n << BigInt(b)) - (1n << BigInt(a)));
 		return this;
@@ -835,24 +457,543 @@ export class DenseBits extends ImmutableDenseBits implements BitSet {
 		this.clearMask((1n << BigInt(b)) - (1n << BigInt(a)));
 		return this;
 	}
-
 	selfComplement(): this {
 		this.bits = ~this.bits;
 		return this;
 	}
-
 	selfIntersect(other: DenseBits): this {
 		this.bits &= other.bits;
 		return this;
 	}
-
 	selfUnion(other: DenseBits): this {
 		this.bits |= other.bits;
 		return this;
 	}
-
 	selfXor(other: DenseBits): this {
 		this.bits ^= other.bits;
+		return this;
+	}
+};
+
+//-----------------------------------------------------------------------------
+// SparseBits - a sparse bitset implementation, where each entry in the 'bits' array represents 32 bits
+//-----------------------------------------------------------------------------
+
+function sparseFromEntries(entries: Record<number, number> | [number, number][]) {
+	const dest: number[] = [];
+	if (Array.isArray(entries)) {
+		for (const [k, v] of entries)
+			dest[k] = v;
+	} else {
+		for (const [k, v] of Object.entries(entries))
+			dest[+k] = v;
+	}
+	return dest;
+}
+
+function sparseCopyUndefined(bits: number[], other: number[], xor = 0) {
+	for (const i in other) {
+		if (bits[i] === undefined)
+			bits[i] = other[i] ^ xor;
+	}
+	return bits;
+}
+
+function sparseClean(bits: number[], undef = 0) {
+	for (const i in bits) {
+		if (bits[i] === undef)
+			delete bits[i];
+	}
+}
+
+function sparseTest(bits: number[], a: number, undef = 0): boolean {
+	return !!((bits[a >> 5] ?? undef) & (1 << (a & 0x1f)));
+}
+
+function sparseSetMask(bits: number[], i: number, m: number, undef = 0) {
+	if (bits[i] !== undefined)
+		bits[i] |= m;
+	else if (!undef)
+		bits[i] = m;
+}
+function sparseClearMask(bits: number[], i: number, m: number, undef = 0) {
+	if (bits[i] !== undefined)
+		bits[i] &= ~m;
+	else if (undef)
+		bits[i] = ~m;
+}
+
+function sparseSetRange(bits: number[], a: number, b: number, undef = 0) {
+	let i = a >> 5, j = b >> 5;
+	if (i === j) {
+		sparseSetMask(bits, i, (1 << (b & 0x1f)) - (1 << (a & 0x1f)), undef);
+	} else {
+		sparseSetMask(bits, i++, -(1 << (a & 0x1f)), undef);
+		if (undef) {
+			while (i < j)
+				delete bits[i++];
+		} else {
+			while (i < j)
+				bits[i++] = -1;
+		}
+		sparseSetMask(bits, i, (1 << (b & 0x1f)) - 1, undef);
+	}
+}
+function sparseClearRange(bits: number[], a: number, b: number, undef = 0) {
+	let i = a >> 5, j = b >> 5;
+	if (i === j) {
+		sparseClearMask(bits, i, (1 << (b & 0x1f)) - (1 << (a & 0x1f)), undef);
+	} else {
+		sparseClearMask(bits, i++, -(1 << (a & 0x1f)), undef);
+		if (!undef) {
+			while (i < j)
+				delete bits[i++];
+		} else {
+			while (i < j)
+				bits[i++] = 0;
+		}
+		sparseClearMask(bits, i, (1 << (b & 0x1f)) - 1, undef);
+	}
+}
+
+function sparseCountSet(bits: number[]): number {
+	let count = 0;
+	for (const i in bits)
+		count += countSet32(bits[i]);
+	return count;
+}
+
+function sparseNthSet(bits: number[], a: number, undef = 0): number {
+	if (undef === 0) {
+		for (const i in bits) {
+			const v = bits[i];
+			const n = countSet32(v);
+			if (a < n)
+				return (+i << 5) + nthSet32(v, a);
+			a -= n;
+		}
+	} else {
+		let prev = 0;
+		for (const i in bits) {
+			const m = (+i - prev) << 5;
+			if (a < m)
+				return (prev << 5) + a;
+			a -= m;
+
+			const v = bits[i];
+			const n = countSet32(v);
+			if (a < n)
+				return (+i << 5) + nthSet32(v, a);
+			a -= n;
+			prev = +i + 1;
+		}
+	}
+	return -1;
+}
+
+function sparseComplement(bits: number[]) {
+	return bits.map(b => ~b);
+}
+function sparseIntersect(bits: number[], other: number[], undef = 0) {
+	return bits.map((b, i) => b & (other[i] ?? undef));
+}
+function sparseUnion(bits: number[], other: number[], undef = 0) {
+	return bits.map((b, i) => b | (other[i] ?? undef));
+}
+function sparseXor(bits: number[], other: number[], undef = 0) {
+	return bits.map((b, i) => b ^ (other[i] ?? undef));
+}
+
+function sparseSelfComplement(bits: number[]) {
+	for (const i in bits)
+		bits[i] = ~bits[i];
+	return bits;
+}
+function sparseSelfIntersect(bits: number[], other: number[]) {
+	for (const i in bits)
+		bits[i] &= other[i];
+	return bits;
+}
+function sparseSelfUnion(bits: number[], other: number[]) {
+	for (const i in bits)
+		bits[i] |= other[i];
+	return bits;
+}
+function sparseSelfXor(bits: number[], other: number[]) {
+	for (const i in bits)
+		bits[i] ^= other[i];
+	return bits;
+}
+
+function sparseContains(bits: number[], other: number[], undef = 0): boolean {
+	for (const i in other) {
+		if (other[i] & ~(bits[i] ?? undef))
+			return false;
+	}
+	return true;
+}
+
+
+function sparseNext(bits: number[], from: number, set = true, undef = 0): number {
+	++from;
+
+	if (undef ? !set : set) {
+		const ai = from >> 5;
+		for (const i in bits) {
+			if (+i >= ai) {
+				const v = bits[i] ^ undef;
+				if (v)
+					return (+i << 5) + lowestSet32(v);
+			}
+		}
+		return -1;
+
+	} else  {
+		let i = from >> 5;
+		if (bits[i] === undefined)
+			return from;
+		let v = (bits[i] ^ undef) | ((1 << (from & 0x1f)) - 1);
+		while (!v) {
+			++i;
+			if (bits[i] === undefined)
+				break;
+			v = bits[i] ^ undef;
+		}
+		return (i << 5) + lowestSet32(~v);
+	}
+}
+
+function *sparseWhere(bits: number[], set: boolean, from = -1, to?: number, undef = 0) {
+	++from;
+	const from32	= from >> 5;
+	const to32		= to === undefined ? Infinity : to >> 5;
+	const fromM		= 1 << (from & 0x1f);
+	const toM		= to === undefined ? 0 : 1 << (to & 0x1f);
+
+	if (undef ? !set : set) {
+		for (const k in bits) {
+			const i = +k;
+			if (i >= to32)
+				break;
+			if (i >= from32) {
+				let v = bits[i] ^ undef;
+				if (i === from32)
+					v &= -fromM;
+				if (i === to32)
+					v &= (toM - 1);
+				while (v) {
+					yield (i << 5) + lowestSet32(v);
+					v = v & (v - 1);
+				}
+			}
+		}
+
+	} else  {
+		if (to32 > from32) {
+			for (let v = ((bits[from32] ?? undef) ^ ~undef) & -fromM; v; v = v & (v - 1))
+				yield (from32 << 5) + lowestSet32(v);
+
+			for (let i = from32 + 1; i < to32; i++) {
+				for (let v = ((bits[i] ?? undef) ^ ~undef); v; v = v & (v - 1))
+					yield (i << 5) + lowestSet32(v);
+			}
+			for (let v = ((bits[to32] ?? undef) ^ ~undef) & (toM - 1); v; v = v & (v - 1))
+				yield (to32 << 5) + lowestSet32(v);
+
+		} else if (to32 === from32) {
+			for (let v = ((bits[from32] ?? undef) ^ ~undef) & (toM - fromM); v; v = v & (v - 1))
+				yield (from32 << 5) + lowestSet32(v);
+		}
+
+	}
+}
+
+function *sparseRanges(bits: number[], undef = 0) {
+	let start = -1, end = 0;
+
+	for (const i in bits) {
+		let b = bits[i] ^ undef;
+		const c0 = +i * 32;
+
+		while ((start < 0 ? b : ~b) !== 0) {
+			if (start === -1) {
+				start = c0 + lowestSet32(b);
+				if (undef)
+					yield [end, start];
+				end = -1;
+				b = b | (b - 1);
+			} else {
+				end = c0 + lowestSet32(~b);
+				if (!undef)
+					yield [start, end];
+				start = -1;
+				b = b & (b + 1);
+			}
+		}
+		if (start >= 0 && bits[+i + 1] === undefined) {
+			if (!undef)
+				yield [start, c0 + 32];
+			start = -1;
+		}
+	}
+	if (undef)
+		yield [end, Infinity];
+}
+
+function sparseSlice(bits: number[], from: number, to?: number) {
+	const from32 = from >> 5;
+	const to32 = to === undefined ? Infinity : to >> 5;
+	const fromBit = from & 0x1f;
+	const toBit = to === undefined ? 0 : to & 0x1f;
+
+	const result: number[] = [];
+
+	for (const i in bits) {
+		const idx = +i;
+		if (idx < from32 || idx > to32) continue;
+
+		let b = bits[i];
+
+		// Mask start bits
+		if (idx === from32)
+			b &= -(1 << fromBit);
+			
+		// Mask end bits
+		if (idx === to32 && to !== undefined)
+			b &= (1 << toBit) - 1;
+
+		if (b !== 0)
+			result[i] = b;
+	}
+	
+	return result;
+}
+
+export class ImmutableSparseBits implements ImmutableBitSet {
+	constructor(protected bits: number[] = []) {
+	}
+
+	protected create(bits: number[] = []): this {
+		return new (this.constructor as new (bits: number[]) => this)(bits);
+	}
+
+	static fromEntries<T extends ImmutableSparseBits>(this: new (...args: any[]) => T, entries: Record<number, number> | [number, number][], ...args: any[]): T {
+		const r = new this(...args);
+		r.bits = sparseFromEntries(entries);
+		return r;
+	}
+	
+	keys() {
+		return Object.keys(this.bits).map(k => +k);
+	}
+	entries(): [number, number][] {
+		return Object.entries(this.bits).map(([k, v]) => [+k, v]);
+	}
+	test(a: number): boolean {
+		return sparseTest(this.bits, a);
+	}
+	countSet(): number {
+		return sparseCountSet(this.bits);
+	}
+	nthSet(a: number): number {
+		return sparseNthSet(this.bits, a);
+	}
+	complement() {
+		return new ImmutableSparseBits2(sparseComplement(this.bits), true);
+	}
+	intersect(other: ImmutableSparseBits): this {
+		return this.create(sparseIntersect(this.bits, other.bits));
+	}
+	union(other: ImmutableSparseBits): this {
+		return this.create(sparseCopyUndefined(sparseUnion(this.bits, other.bits), other.bits));
+	}
+	xor(other: ImmutableSparseBits): this {
+		return this.create(sparseCopyUndefined(sparseXor(this.bits, other.bits), other.bits));
+	}
+	contains(other: ImmutableSparseBits): boolean {
+		return sparseContains(this.bits, other.bits);
+	}
+	next(from: number, set = true): number {
+		return sparseNext(this.bits, from, set);
+	}
+	where(set: boolean, from = -1, to?: number) {
+		return {
+			[Symbol.iterator]: () => sparseWhere(this.bits, set, from, to)
+		};
+	}
+	ranges() {
+		return {
+			[Symbol.iterator]: () => sparseRanges(this.bits)
+		};
+	}
+	*[Symbol.iterator](): Generator<number> {
+		yield* sparseWhere(this.bits, true, -1);
+	}
+
+	clean(): this {
+		sparseClean(this.bits);
+		return this;
+	}
+	toDense(): DenseBits {
+		let bits = 0n;
+		for (const i in this.bits)
+			bits |= BigInt(this.bits[i]) << BigInt(+i * 32);
+		return new DenseBits(bits);
+	}
+	slice(from: number, to?: number): ImmutableBitSet {
+		return this.create(sparseSlice(this.bits, from, to));
+	}
+}
+
+export class SparseBits extends ImmutableSparseBits implements BitSet {
+	set(a: number) {
+		sparseSetMask(this.bits, a >> 5, 1 << (a & 0x1f));
+	}
+	clear(a: number) {
+		sparseClearMask(this.bits, a >> 5, 1 << (a & 0x1f));
+	}
+	setRange(a: number, b: number) {
+		sparseSetRange(this.bits, a, b);
+		return this;
+	}
+	clearRange(a: number, b: number) {
+		sparseClearRange(this.bits, a, b);
+		return this;
+	}
+	selfIntersect(other: SparseBits): this {
+		sparseSelfIntersect(this.bits, other.bits);
+		return this;
+	}
+	selfUnion(other: SparseBits): this {
+		sparseCopyUndefined(sparseSelfUnion(this.bits, other.bits), other.bits);
+		return this;
+	}
+	selfXor(other: SparseBits): this {
+		sparseCopyUndefined(sparseSelfXor(this.bits, other.bits), other.bits);
+		return this;
+	}
+};
+
+//-----------------------------------------------------------------------------
+// SparseBits2 as above, with an 'undef' member indicating whether undefined entries are treated as 0 or 0xffffffff
+//-----------------------------------------------------------------------------
+
+export class ImmutableSparseBits2 extends ImmutableSparseBits {
+	protected undef: number;
+
+	constructor(bits: number[] = [], initial = false) {
+		super(bits);
+		this.undef = initial ? -1 : 0;
+	}
+
+	protected create(bits: number[] = [], init?: boolean): this {
+		return new (this.constructor as new (bits: number[], init?: boolean) => this)(bits, init);
+	}
+
+	test(a: number): boolean {
+		return sparseTest(this.bits, a, this.undef);
+	}
+	nthSet(a: number): number {
+		return sparseNthSet(this.bits, a, this.undef);
+	}
+	complement(): this {
+		return this.create(sparseComplement(this.bits), this.undef === 0);
+	}
+	intersect(other: ImmutableSparseBits2): this {
+		if (this.undef)
+			return this.create(sparseCopyUndefined(sparseIntersect(this.bits, other.bits, other.undef), other.bits), !!other.undef);
+		return this.create(sparseIntersect(this.bits, other.bits), false);
+	}
+	union(other: ImmutableSparseBits2): this {
+		if (this.undef)
+			return this.create(sparseUnion(this.bits, other.bits), true);
+		return this.create(sparseCopyUndefined(sparseUnion(this.bits, other.bits), other.bits), !!other.undef);
+	}
+	xor(other: ImmutableSparseBits2): this {
+		return this.create(sparseCopyUndefined(sparseXor(this.bits, other.bits), other.bits, this.undef), !!(this.undef ^ other.undef));
+	}
+	contains(other: ImmutableSparseBits2): boolean {
+		if (other.undef && !this.undef)
+			return false;
+		return sparseContains(this.bits, other.bits, this.undef);
+	}
+	next(from: number, set = true): number {
+		return sparseNext(this.bits, from, set, this.undef);
+	}
+	where(set: boolean, from = -1, to?: number) {
+		return {
+			[Symbol.iterator]: () => sparseWhere(this.bits, set, from, to, this.undef)
+		};
+	}
+	ranges() {
+		return {
+			[Symbol.iterator]: () => sparseRanges(this.bits, this.undef)
+		};
+	}
+	*[Symbol.iterator](): Generator<number> {
+		yield* sparseWhere(this.bits, true, -1, undefined, this.undef);
+	}
+	clean(): this {
+		sparseClean(this.bits, this.undef);
+		return this;
+	}
+	toDense(): DenseBits {
+		let bits = 0n;
+		if (this.undef) {
+			for (const i in this.bits)
+				bits |= BigInt(~this.bits[i]) << BigInt(+i * 32);
+			bits = ~bits;
+		} else {
+			for (const i in this.bits)
+				bits |= BigInt(this.bits[i]) << BigInt(+i * 32);
+		}
+		return new DenseBits(bits);
+	}
+	slice(from: number, to?: number): ImmutableBitSet {
+		return this.create(sparseSlice(this.bits, from, to), !!this.undef);
+	}
+}
+
+export class SparseBits2 extends ImmutableSparseBits2 implements BitSet {
+	set(a: number) {
+		sparseSetMask(this.bits, a >> 5, 1 << (a & 0x1f), this.undef);
+	}
+	clear(a: number) {
+		sparseClearMask(this.bits, a >> 5, 1 << (a & 0x1f), this.undef);
+	}
+	setRange(a: number, b: number) {
+		sparseSetRange(this.bits, a, b, this.undef);
+		return this;
+	}
+	clearRange(a: number, b: number) {
+		sparseClearRange(this.bits, a, b, this.undef);
+		return this;
+	}
+	selfComplement(): this {
+		this.undef = ~this.undef;
+		sparseSelfComplement(this.bits);
+		return this;
+	}
+	selfIntersect(other: SparseBits2): this {
+		sparseSelfIntersect(this.bits, other.bits);
+		if (this.undef) {
+			sparseCopyUndefined(this.bits, other.bits);
+			this.undef = other.undef;
+		}
+		return this;
+	}
+	selfUnion(other: SparseBits2): this {
+		sparseSelfUnion(this.bits, other.bits);
+		if (!this.undef) {
+			sparseCopyUndefined(this.bits, other.bits);
+			this.undef = other.undef;
+		}
+		return this;
+	}
+	selfXor(other: SparseBits2): this {
+		sparseSelfXor(this.bits, other.bits);
+		sparseCopyUndefined(this.bits, other.bits, this.undef);
+		this.undef ^= other.undef;
 		return this;
 	}
 };
