@@ -27,45 +27,8 @@ function timed(name: string, fn: ()=>void) {
 	console.log("finished: " + name + " in " + (end - start) + "ms");
 }
 
-function highestSet1024(x: bigint): number {
-	let s = 0;
-	let k = 0;
 
-	for (let t = x >> 1024n; t; t >>= BigInt(s)) {
-		s = 1024 << k++;
-		x = t;
-	}
-
-	if (k) {
-		// determine length by bisection
-		k--;
-		while (k--) {
-			const b = x >> BigInt(1024 << k);
-			if (b) {
-				s += 1024 << k;
-				x = b;
-			}
-		}
-	}
-
-	const y = Number(x);
-	let b = Math.floor(Math.log2(y));
-	if (1n << BigInt(b) <= x)
-		++b;
-	return s + b;
-
-//	return (s + 1024) - Math.clz32(Number(x));
-}
-
-for (let i = 0; i < 50; i++) {
-	const n = Math.floor(Math.pow(1.5, i));
-	const j = bits.lowestSet(1n << BigInt(n));
-	console.log(i, j);
-	if (j !== n)
-		console.log('error');
-}
-
-//const sp = new DenseBits;
+//const sp = new bits.DenseBits();
 const sp = new bits.SparseBits2();
 sp.setRange(42, 100);
 sp.clearRange(64, 96);
@@ -85,8 +48,10 @@ for (let i = sp.next(-1, false); i !== -1; i = sp.next(i, false)) {
 	console.log(i);
 }
 */
-sp.selfComplement();
 
+sp.set(0);
+sp.set(2);
+sp.selfComplement();
 for (const i of sp.ranges()) {
 	console.log(i);
 }
