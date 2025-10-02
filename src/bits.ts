@@ -58,6 +58,15 @@ export function nthSet32(x: number, i: number): number {
 	return n;
 }
 
+export function reverse32(x: number): number {
+	x = ((x >> 1) & 0x55555555) | ((x & 0x55555555) << 1);
+	x = ((x >> 2) & 0x33333333) | ((x & 0x33333333) << 2);
+	x = ((x >> 4) & 0x0F0F0F0F) | ((x & 0x0F0F0F0F) << 4);
+	x = ((x >> 8) & 0x00FF00FF) | ((x & 0x00FF00FF) << 8);
+	return (x >> 16) | (x << 16);
+}
+
+
 /*
 const testersShift: bigint[] = [];	//32 << i
 const testers:		bigint[] = [];	//1 << (32 << i)
@@ -255,6 +264,45 @@ export function nthSet(x: bigint|number, i: number): number {
 	return n;
 }
 
+export function reverse(x: number): number;
+export function reverse(x: bigint): bigint;
+export function reverse(x: number|bigint) {
+	if (typeof x === 'number')
+		return reverse32(Number(x));
+
+	let k	= 5;
+	for (let t = x >> 32n; t;)
+		t >>= BigInt(1 << k++);
+
+	let n	= 1 << k;
+	let s	= 0;
+
+	if (k === 5) {
+		s += highestSet32(Number(x));
+		
+	} else {
+		let t	= x;
+		while (k >= 10) {
+			--k;
+			const b = t >> BigInt(1 << k);
+			if (b) {
+				s += 1 << k;
+				t = b;
+			}
+		}
+		s += highestSet1024(Number(t));
+	}
+	
+	const	shift	= n - s;
+	let		mask	= (1n << BigInt(n)) - 1n;
+	while (n >>= 1) {
+		const nb = BigInt(n);
+		mask ^= (mask << nb);
+		x = ((x >> nb) & mask) | ((x << nb) & ~mask);
+	}
+	return x >> BigInt(shift);
+}
+
 // Returns the index of the highest clear bit
 export function highestClear(x: number|bigint): number {
 	return highestSet(~x);
@@ -312,7 +360,7 @@ export interface BitSet {
 	// Returns an iterator over all set (or clear) bits, starting after 'from'
 	where(set: boolean, from?: number, to?: number): { [Symbol.iterator](): Generator<number> };
 	// Returns an iterator over all ranges of set (or clear) bits
-	ranges(set?: boolean): { [Symbol.iterator](): Generator<number[]> };
+	ranges(set?: boolean): { [Symbol.iterator](): Generator<[number, number]> };
 	slice(from: number, to?: number): BitSet;
 	[Symbol.iterator](): Generator<number>;
 
@@ -346,7 +394,7 @@ export class DenseBits implements BitSet {
 		return new (this.constructor as new (bits?: bigint) => this)(bits);
 	}
 
-	static fromIndices<T extends DenseBits>(this: new (bits: bigint) => T, ...indices: number[]): T {
+	static fromIndices<C extends new (bits: bigint, ...args: any[]) => any>(this: C, ...indices: number[]): InstanceType<C> {
 		let bits = 0n;
 		for (const i of indices)
 			bits |= 1n << BigInt(i);
@@ -412,7 +460,7 @@ export class DenseBits implements BitSet {
 	ranges(set = true) {
 		let bits = this.bits;
 		return {
-			*[Symbol.iterator](): Generator<number[]> {
+			*[Symbol.iterator](): Generator<[number, number]> {
 				let offset = 0;
 				while (bits) {
 					const i = highestSet(bits & -bits);
@@ -433,14 +481,14 @@ export class DenseBits implements BitSet {
 		yield* this.where(true);
 	}
 
-	toSparse(): SparseBits2 {
-		const sparse: Record<number, number> = {};
+	toSparse(): SparseBits {
+		const sparse: number[] = [];
 		for (let bits = this.bits, i = 0; bits; bits >>= 32n, i++) {
 			const v = Number(bits & 0xffffffffn);
 			if (v)
 				sparse[i] = v;
 		}
-		return SparseBits2.fromEntries(sparse, false);
+		return new SparseBits(sparse);
 	}
 
 	slice(from: number, to?: number): BitSet {
@@ -504,7 +552,7 @@ export class DenseBits32 implements BitSet {
 		return new (this.constructor as new (bits?: Uint32Array) => this)(bits);
 	}
 
-	static fromIndices<T extends DenseBits>(this: new (bits: Uint32Array) => T, ...indices: number[]): T {
+	static fromIndices<C extends new (bits: Uint32Array, ...args: any[]) => any>(this: C, ...indices: number[]): InstanceType<C> {
 		const max = Math.max(...indices);
 		const bits = new Uint32Array(Math.ceil((max + 1) / 32));
 		for (const i of indices)
@@ -606,7 +654,7 @@ export class DenseBits32 implements BitSet {
 	ranges(set = true) {
 		const bits = this.bits;
 		return {
-			*[Symbol.iterator](): Generator<number[]> {
+			*[Symbol.iterator](): Generator<[number, number]> {
 				let start = -1, end = 0;
 				for (let i = 0; i < bits.length; i++) {
 					let b = bits[i];
@@ -642,9 +690,14 @@ export class DenseBits32 implements BitSet {
 		yield* this.where(true);
 	}
 
-	toSparse(): SparseBits2 {
-		const sparse = Object.fromEntries(Array.from(this.bits.entries()).filter(([_, v]) => v));
-		return SparseBits2.fromEntries(sparse, false);
+	toSparse(): SparseBits {
+		const sparse: number[] = [];
+		for (let i = 0; i < this.bits.length; i++) {
+			const v = this.bits[i];
+			if (v)
+				sparse[i] = v;
+		}
+		return new SparseBits(sparse);
 	}
 
 	slice(from: number, to?: number): BitSet {
@@ -999,7 +1052,7 @@ function *sparseWhere(bits: number[], set: boolean, from = -1, to?: number, unde
 	const fromM		= 1 << (from & 0x1f);
 	const toM		= to === undefined ? 0 : 1 << (to & 0x1f);
 
-	function sub(i: number, v: number) {
+	function* block(i: number, v: number) {
 		while (v) {
 			yield (i << 5) + lowestSet32(v);
 			v &= v - 1;
@@ -1009,42 +1062,32 @@ function *sparseWhere(bits: number[], set: boolean, from = -1, to?: number, unde
 	if (undef ? !set : set) {
 		for (const k in bits) {
 			const i = +k;
-			if (i >= to32)
-				break;
 			if (i >= from32) {
+				if (i >= to32)
+					break;
 				let v = bits[i] ^ undef;
 				if (i === from32)
 					v &= -fromM;
 				if (i === to32)
 					v &= (toM - 1);
-				while (v) {
-					yield (i << 5) + lowestSet32(v);
-					v = v & (v - 1);
-				}
+				yield *block(i, v);
 			}
 		}
 
 	} else  {
 		if (to32 > from32) {
-			for (let v = ((bits[from32] ?? undef) ^ ~undef) & -fromM; v; v = v & (v - 1))
-				yield (from32 << 5) + lowestSet32(v);
-
-			for (let i = from32 + 1; i < to32; i++) {
-				for (let v = ((bits[i] ?? undef) ^ ~undef); v; v = v & (v - 1))
-					yield (i << 5) + lowestSet32(v);
-			}
-			for (let v = ((bits[to32] ?? undef) ^ ~undef) & (toM - 1); v; v = v & (v - 1))
-				yield (to32 << 5) + lowestSet32(v);
+			yield *block(from32, ((bits[from32] ?? undef) ^ ~undef) & -fromM);
+			for (let i = from32 + 1; i < to32; i++)
+				yield *block(i, (bits[i] ?? undef) ^ ~undef);
+			yield *block(to32, ((bits[to32] ?? undef) ^ ~undef) & (toM - 1));
 
 		} else if (to32 === from32) {
-			for (let v = ((bits[from32] ?? undef) ^ ~undef) & (toM - fromM); v; v = v & (v - 1))
-				yield (from32 << 5) + lowestSet32(v);
+			yield *block(from32, ((bits[from32] ?? undef) ^ ~undef) & (-fromM & (toM - 1)));
 		}
-
 	}
 }
 
-function *sparseRanges(bits: number[], set: boolean, undef = 0) {
+function *sparseRanges(bits: number[], set: boolean, undef = 0): Generator<[number, number]> {
 	let start = -1, end = 0;
 	let other = undef ? set : !set;
 
@@ -1079,65 +1122,60 @@ function *sparseRanges(bits: number[], set: boolean, undef = 0) {
 
 function sparseSlice(bits: number[], from: number, to?: number) {
 	const from32	= from >> 5;
-	const to32		= to === undefined ? Infinity : to >> 5;
 	const fromM		= 1 << (from & 0x1f);
-	const toM		= to === undefined ? 0 : 1 << (to & 0x1f);
+	const to32		= to !== undefined ? to >> 5 : Infinity;
+	const toM		= to !== undefined ? 1 << (to & 0x1f) : 0;
 
 	const result: number[] = [];
 
-	for (const i in bits) {
-		const idx = +i;
-		if (idx >= from32) {
-			if (idx > to32)
+	for (const k in bits) {
+		const i = +k;
+		if (i >= from32) {
+			if (i > to32)
 				break;
 
-			let b = bits[i];
-			if (idx === from32)
+			let b = bits[k];
+			if (i === from32)
 				b &= -fromM;
-			if (idx === to32)
+			if (i === to32)
 				b &= toM - 1;
 
 			if (b !== 0)
-				result[i] = b;
+				result[k] = b;
 		}
 	}
 	
 	return result;
 }
 
-// Extract constructor parameters after the first (bits) parameter
-type ExtraParams<T> = T extends new (bits: number[], ...args: infer P) => any ? P : never;
+type SparseNumberArray = number[] | Record<number, number>;
+type ExtraParams<T> = T extends new (bits: SparseNumberArray, ...args: infer P) => any ? P : never;
 
 export class SparseBits implements BitSet {
-	constructor(protected bits: number[] = []) {
+	protected bits: number[];
+
+	constructor(bits: SparseNumberArray = []) {
+		this.bits = bits as number[];
 	}
 
-	protected create(bits: number[] = []): this {
-		return new (this.constructor as new (bits: number[]) => this)(bits);
+	protected create(bits: SparseNumberArray = []): this {
+		return new (this.constructor as new (bits: SparseNumberArray) => this)(bits);
 	}
 
-	static fromEntries<T extends SparseBits>(this: new (bits: number[], ...extra: any[]) => T, entries: Record<number, number> | [number, number][], ...extra: any[]): T {
-		const dest: number[] = [];
-		if (Array.isArray(entries)) {
-			for (const [k, v] of entries)
-				dest[k] = v;
-		} else {
-			for (const [k, v] of Object.entries(entries))
-				dest[+k] = v;
-		}
-		return new this(dest, ...extra);
+	static fromEntries<C extends new (bits: SparseNumberArray, ...args: any[]) => any>(this: C, entries: Record<number, number> | [number, number][], ...extra: ExtraParams<C>): InstanceType<C> {
+		return new this(Array.isArray(entries) ? Object.fromEntries(entries) as Record<number, number> : entries, ...extra);
 	}
 
-	static fromIndices<T extends SparseBits>(this: new (bits: number[], ...extra: any[]) => T, ...indices: number[]): T;
-	static fromIndices<T extends SparseBits>(this: new (bits: number[], ...extra: any[]) => T, indices: number[], ...extra: ExtraParams<T>): T;
-	static fromIndices<T extends SparseBits>(this: new (bits: number[], ...extra: any[]) => T, indicesOrFirst: number | number[], ...rest: any[]): T {
+	static fromIndices<C extends new (bits: SparseNumberArray, ...args: any[]) => any>(this: C, ...indices: number[]): InstanceType<C>;
+	static fromIndices<C extends new (bits: SparseNumberArray, ...args: any[]) => any>(this: C, indices: number[], ...extra: ExtraParams<C>): InstanceType<C>;
+	static fromIndices<C extends new (bits: SparseNumberArray, ...args: any[]) => any>(this: C, indicesOrFirst: number | number[], ...rest: any[]): InstanceType<C> {
 		return Array.isArray(indicesOrFirst)
 			? new this(sparseFromIndices(indicesOrFirst), ...rest)
 			: new this(sparseFromIndices([indicesOrFirst, ...rest]));
 	}
 
 	copy(): this {
-		return this.create(this.bits.slice());
+		return this.create({...this.bits});
 	}
 
 	empty(): boolean {
@@ -1214,7 +1252,7 @@ export class SparseBits implements BitSet {
 		return new DenseBits(bits);
 	}
 	slice(from: number, to?: number): BitSet {
-		return this.create(sparseSlice(this.bits, from, to));
+		return this.create(sparseSlice(this.bits, from, to));// ?? this.bits.length * 32));
 	}
 
 	//mutating methods
@@ -1259,17 +1297,17 @@ export class SparseBits implements BitSet {
 export class SparseBits2 extends SparseBits {
 	protected undef: number;
 
-	constructor(bits: number[] = [], initial = false) {
+	constructor(bits: SparseNumberArray = [], initial = false) {
 		super(bits);
 		this.undef = initial ? -1 : 0;
 	}
 
-	protected create(bits: number[] = [], init?: boolean): this {
-		return new (this.constructor as new (bits: number[], init?: boolean) => this)(bits, init);
+	protected create(bits: SparseNumberArray = [], initial = false): this {
+		return new (this.constructor as new (bits: SparseNumberArray, initital: boolean) => this)(bits, initial);
 	}
 
 	copy(): this {
-		return this.create(this.bits.slice(), !!this.undef);
+		return this.create({...this.bits}, !!this.undef);
 	}
 	empty(): boolean {
 		return !this.undef && super.empty();
@@ -1362,6 +1400,7 @@ export class SparseBits2 extends SparseBits {
 		return new DenseBits(bits);
 	}
 	slice(from: number, to?: number): BitSet {
+		//to ??= this.bits.length * 32;
 		return this.undef
 			? this.create(sparseSelfComplement(sparseSlice(sparseComplement(this.bits), from, to)), true)
 			: this.create(sparseSlice(this.bits, from, to), false);
