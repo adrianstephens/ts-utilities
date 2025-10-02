@@ -482,7 +482,7 @@ export class DenseBits implements BitSet {
 	}
 
 	toSparse(): SparseBits {
-		const sparse: number[] = [];
+		const sparse: sparsebits = [];
 		for (let bits = this.bits, i = 0; bits; bits >>= 32n, i++) {
 			const v = Number(bits & 0xffffffffn);
 			if (v)
@@ -691,7 +691,7 @@ export class DenseBits32 implements BitSet {
 	}
 
 	toSparse(): SparseBits {
-		const sparse: number[] = [];
+		const sparse: sparsebits = [];
 		for (let i = 0; i < this.bits.length; i++) {
 			const v = this.bits[i];
 			if (v)
@@ -802,15 +802,16 @@ export class DenseBits32 implements BitSet {
 //-----------------------------------------------------------------------------
 // SparseBits - a sparse bitset where each entry in the 'bits' array represents 32 bits
 //-----------------------------------------------------------------------------
+type sparsebits = Record<number, number>;
 
 function sparseFromIndices(indices: number[]) {
-	const bits: number[] = [];
+	const bits: sparsebits = {};
 	for (const i of indices)
 		bits[i >> 5] |= 1 << (i & 0x1f);
 	return bits;
 }
 
-function sparseCopyUndefined(bits: number[], other: number[], xor = 0) {
+function sparseCopyUndefined(bits: sparsebits, other: sparsebits, xor = 0) {
 	for (const i in other) {
 		if (bits[i] === undefined)
 			bits[i] = other[i] ^ xor;
@@ -818,7 +819,7 @@ function sparseCopyUndefined(bits: number[], other: number[], xor = 0) {
 	return bits;
 }
 
-function sparseDeleteUndefined(bits: number[], other: number[]) {
+function sparseDeleteUndefined(bits: sparsebits, other: sparsebits) {
 	for (const i in bits) {
 		if (other[i] === undefined)
 			delete bits[i];
@@ -826,31 +827,31 @@ function sparseDeleteUndefined(bits: number[], other: number[]) {
 	return bits;
 }
 
-function sparseClean(bits: number[], undef = 0) {
+function sparseClean(bits: sparsebits, undef = 0) {
 	for (const i in bits) {
 		if (bits[i] === undef)
 			delete bits[i];
 	}
 }
 
-function sparseTest(bits: number[], a: number, undef = 0): boolean {
+function sparseTest(bits: sparsebits, a: number, undef = 0): boolean {
 	return !!((bits[a >> 5] ?? undef) & (1 << (a & 0x1f)));
 }
 
-function sparseSetMask(bits: number[], i: number, m: number, undef = 0) {
+function sparseSetMask(bits: sparsebits, i: number, m: number, undef = 0) {
 	if (bits[i] !== undefined)
 		bits[i] |= m;
 	else if (!undef)
 		bits[i] = m;
 }
-function sparseClearMask(bits: number[], i: number, m: number, undef = 0) {
+function sparseClearMask(bits: sparsebits, i: number, m: number, undef = 0) {
 	if (bits[i] !== undefined)
 		bits[i] &= ~m;
 	else if (undef)
 		bits[i] = ~m;
 }
 
-function sparseSetRange(bits: number[], a: number, b: number, undef = 0) {
+function sparseSetRange(bits: sparsebits, a: number, b: number, undef = 0) {
 	let i = a >> 5, j = b >> 5;
 	if (i === j) {
 		sparseSetMask(bits, i, (1 << (b & 0x1f)) - (1 << (a & 0x1f)), undef);
@@ -866,7 +867,7 @@ function sparseSetRange(bits: number[], a: number, b: number, undef = 0) {
 		sparseSetMask(bits, i, (1 << (b & 0x1f)) - 1, undef);
 	}
 }
-function sparseClearRange(bits: number[], a: number, b: number, undef = 0) {
+function sparseClearRange(bits: sparsebits, a: number, b: number, undef = 0) {
 	let i = a >> 5, j = b >> 5;
 	if (i === j) {
 		sparseClearMask(bits, i, (1 << (b & 0x1f)) - (1 << (a & 0x1f)), undef);
@@ -883,14 +884,14 @@ function sparseClearRange(bits: number[], a: number, b: number, undef = 0) {
 	}
 }
 
-function sparseCountSet(bits: number[]): number {
+function sparseCountSet(bits: sparsebits): number {
 	let count = 0;
 	for (const i in bits)
 		count += countSet32(bits[i]);
 	return count;
 }
 
-function sparseNthSet(bits: number[], a: number, undef = 0): number {
+function sparseNthSet(bits: sparsebits, a: number, undef = 0): number {
 	if (undef === 0) {
 		for (const i in bits) {
 			const v = bits[i];
@@ -918,11 +919,14 @@ function sparseNthSet(bits: number[], a: number, undef = 0): number {
 	return -1;
 }
 
-function sparseComplement(bits: number[]): number[] {
-	return bits.map(b => ~b);
+function sparseComplement(bits: sparsebits): sparsebits {
+	const result: sparsebits = [];
+	for (const i in bits)
+		result[i] = ~bits[i];
+	return result;
 }
-function sparseIntersect(bits: number[], other: number[]): number[] {
-	const result: number[] = [];
+function sparseIntersect(bits: sparsebits, other: sparsebits): sparsebits {
+	const result: sparsebits = [];
 	for (const i in bits) {
 		if (other[i] !== undefined) {
 			result[i] = bits[i] & other[i];
@@ -930,8 +934,8 @@ function sparseIntersect(bits: number[], other: number[]): number[] {
 	}
 	return result;
 }
-function sparseUnion(bits: number[], other: number[]): number[] {
-	const result: number[] = [];
+function sparseUnion(bits: sparsebits, other: sparsebits): sparsebits {
+	const result: sparsebits = [];
 	for (const i in bits) {
 		if (other[i] !== undefined) {
 			result[i] = bits[i] | other[i];
@@ -939,8 +943,8 @@ function sparseUnion(bits: number[], other: number[]): number[] {
 	}
 	return result;
 }
-function sparseXor(bits: number[], other: number[]): number[] {
-	const result: number[] = [];
+function sparseXor(bits: sparsebits, other: sparsebits): sparsebits {
+	const result: sparsebits = [];
 	for (const i in bits) {
 		if (other[i] !== undefined) {
 			result[i] = bits[i] ^ other[i];
@@ -948,8 +952,8 @@ function sparseXor(bits: number[], other: number[]): number[] {
 	}
 	return result;
 }
-function sparseDifference(bits: number[], other: number[]): number[] {
-	const result: number[] = [];
+function sparseDifference(bits: sparsebits, other: sparsebits): sparsebits {
+	const result: sparsebits = [];
 	for (const i in bits) {
 		if (other[i] !== undefined) {
 			result[i] = bits[i] & ~other[i];
@@ -958,37 +962,37 @@ function sparseDifference(bits: number[], other: number[]): number[] {
 	return result;
 }
 
-function sparseSelfComplement(bits: number[]) {
+function sparseSelfComplement(bits: sparsebits) {
 	for (const i in bits)
 		bits[i] = ~bits[i];
 	return bits;
 }
-function sparseSelfIntersect(bits: number[], other: number[]) {
+function sparseSelfIntersect(bits: sparsebits, other: sparsebits) {
 	for (const i in bits)
 		if (other[i] !== undefined)
 			bits[i] &= other[i];
 	return bits;
 }
-function sparseSelfUnion(bits: number[], other: number[]) {
+function sparseSelfUnion(bits: sparsebits, other: sparsebits) {
 	for (const i in bits)
 		if (other[i] !== undefined)
 			bits[i] |= other[i];
 	return bits;
 }
-function sparseSelfXor(bits: number[], other: number[]) {
+function sparseSelfXor(bits: sparsebits, other: sparsebits) {
 	for (const i in bits)
 		if (other[i] !== undefined)
 			bits[i] ^= other[i];
 	return bits;
 }
-function sparseSelfDifference(bits: number[], other: number[]) {
+function sparseSelfDifference(bits: sparsebits, other: sparsebits) {
 	for (const i in bits)
 		if (other[i] !== undefined)
 			bits[i] &= ~other[i];
 	return bits;
 }
 
-function sparseEquals(bits: number[], other: number[]): boolean {
+function sparseEquals(bits: sparsebits, other: sparsebits): boolean {
 	const ka = Object.keys(bits), kb = Object.keys(other);
 	if (ka.length !== kb.length)
 		return false;
@@ -999,7 +1003,7 @@ function sparseEquals(bits: number[], other: number[]): boolean {
 	return true;
 }
 
-function sparseIntersects(bits: number[], other: number[], undef = 0): boolean {
+function sparseIntersects(bits: sparsebits, other: sparsebits, undef = 0): boolean {
 	for (const i in bits) {
 		if ((bits[i] & (other[i] ?? undef)))
 			return true;
@@ -1007,7 +1011,7 @@ function sparseIntersects(bits: number[], other: number[], undef = 0): boolean {
 	return false;
 }
 
-function sparseContains(bits: number[], other: number[], undef = 0): boolean {
+function sparseContains(bits: sparsebits, other: sparsebits, undef = 0): boolean {
 	for (const i in other) {
 		if (other[i] & ~(bits[i] ?? undef))
 			return false;
@@ -1015,7 +1019,7 @@ function sparseContains(bits: number[], other: number[], undef = 0): boolean {
 	return true;
 }
 
-function sparseNext(bits: number[], from: number, set = true, undef = 0): number {
+function sparseNext(bits: sparsebits, from: number, set = true, undef = 0): number {
 	++from;
 	const from32	= from >> 5;
 	const fromM		= 1 << (from & 0x1f);
@@ -1045,7 +1049,7 @@ function sparseNext(bits: number[], from: number, set = true, undef = 0): number
 	}
 }
 
-function *sparseWhere(bits: number[], set: boolean, from = -1, to?: number, undef = 0) {
+function *sparseWhere(bits: sparsebits, set: boolean, from = -1, to?: number, undef = 0) {
 	++from;
 	const from32	= from >> 5;
 	const to32		= to === undefined ? Infinity : to >> 5;
@@ -1087,7 +1091,7 @@ function *sparseWhere(bits: number[], set: boolean, from = -1, to?: number, unde
 	}
 }
 
-function *sparseRanges(bits: number[], set: boolean, undef = 0): Generator<[number, number]> {
+function *sparseRanges(bits: sparsebits, set: boolean, undef = 0): Generator<[number, number]> {
 	let start = -1, end = 0;
 	let other = undef ? set : !set;
 
@@ -1120,25 +1124,28 @@ function *sparseRanges(bits: number[], set: boolean, undef = 0): Generator<[numb
 		yield [end, Infinity];
 }
 
-function sparseSlice(bits: number[], from: number, to?: number) {
+function sparseSlice(bits: sparsebits, from: number, to?: number) {
 	const from32	= from >> 5;
 	const fromM		= 1 << (from & 0x1f);
 	const to32		= to !== undefined ? to >> 5 : Infinity;
 	const toM		= to !== undefined ? 1 << (to & 0x1f) : 0;
 
-	const result: number[] = [];
+	const result: sparsebits = [];
 
 	for (const k in bits) {
 		const i = +k;
 		if (i >= from32) {
-			if (i > to32)
-				break;
-
 			let b = bits[k];
+
 			if (i === from32)
 				b &= -fromM;
-			if (i === to32)
+
+			if (i === to32) {
 				b &= toM - 1;
+				if (b !== 0)
+					result[k] = b;
+				break;
+			}
 
 			if (b !== 0)
 				result[k] = b;
@@ -1148,22 +1155,22 @@ function sparseSlice(bits: number[], from: number, to?: number) {
 	return result;
 }
 
-type SparseNumberArray = number[] | Record<number, number>;
+type SparseNumberArray = number[] | sparsebits;
 type ExtraParams<T> = T extends new (bits: SparseNumberArray, ...args: infer P) => any ? P : never;
 
 export class SparseBits implements BitSet {
-	protected bits: number[];
+	protected bits: sparsebits;
 
 	constructor(bits: SparseNumberArray = []) {
-		this.bits = bits as number[];
+		this.bits = bits;// as Record<number, number>;
 	}
 
 	protected create(bits: SparseNumberArray = []): this {
 		return new (this.constructor as new (bits: SparseNumberArray) => this)(bits);
 	}
 
-	static fromEntries<C extends new (bits: SparseNumberArray, ...args: any[]) => any>(this: C, entries: Record<number, number> | [number, number][], ...extra: ExtraParams<C>): InstanceType<C> {
-		return new this(Array.isArray(entries) ? Object.fromEntries(entries) as Record<number, number> : entries, ...extra);
+	static fromEntries<C extends new (bits: SparseNumberArray, ...args: any[]) => any>(this: C, entries: sparsebits | [number, number][], ...extra: ExtraParams<C>): InstanceType<C> {
+		return new this(Array.isArray(entries) ? Object.fromEntries(entries) : entries, ...extra);
 	}
 
 	static fromIndices<C extends new (bits: SparseNumberArray, ...args: any[]) => any>(this: C, ...indices: number[]): InstanceType<C>;
