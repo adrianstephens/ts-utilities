@@ -56,7 +56,7 @@ export class Lazy<T> {
 		return this._value;
 	}
 	// Add 'then' method only when T is a Promise
-	then<U>(this: T extends Promise<infer R> ? Lazy<T> : never, onFulfilled: (value: T extends Promise<infer R> ? R : never) => U): Promise<U> {
+	then<U>(this: T extends Promise<infer _R> ? Lazy<T> : never, onFulfilled: (value: T extends Promise<infer R> ? R : never) => U): Promise<U> {
 		return (this.value as any).then(onFulfilled);
 	}
 }

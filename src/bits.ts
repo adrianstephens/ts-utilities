@@ -4,7 +4,7 @@
 
 // Returns the index (0-31) of the lowest set bit, or 32 if none
 export function lowestSet32(x: number): number {
-    return x === 0 ? 32 : 31 - Math.clz32(x & -x);
+	return x === 0 ? 32 : 31 - Math.clz32(x & -x);
 }
 
 // Returns the index (1-32) of the highest set bit, or 0 if none
@@ -13,23 +13,23 @@ export function highestSet32(x: number): number {
 }
 
 export function highestSet1024(x: number): number {
-	let b = Math.floor(Math.log2(x));
+	const b = Math.floor(Math.log2(x));
 	return 1n << BigInt(b) <= x ? b + 1 : b;
 }
 
 // Returns the number of set bits
 export function countSet32(x: number): number {
-	x = x - ((x >> 1) & 0x55555555)
-	x = (x & 0x33333333) + ((x >> 2) & 0x33333333)
-	return ((x + (x >> 4) & 0xF0F0F0F) * 0x1010101) >> 24
+	x = x - ((x >> 1) & 0x55555555);
+	x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+	return ((x + (x >> 4) & 0xF0F0F0F) * 0x1010101) >> 24;
 }
 
 // Returns the index (0-31) of the nth set bit, or 32 if none
 export function nthSet32(x: number, i: number): number {
-	let b2 = x - ((x >> 1) & 0x55555555)
-	let b4 = (b2 & 0x33333333) + ((b2 >> 2) & 0x33333333)
+	let b2 = x - ((x >> 1) & 0x55555555);
+	let b4 = (b2 & 0x33333333) + ((b2 >> 2) & 0x33333333);
 	let b8 = (b4 + (b4 >> 4) & 0xF0F0F0F);
-	let b16 = (b8 + (b8 >> 8)) & 0xff;
+	const b16 = (b8 + (b8 >> 8)) & 0xff;
 
 	let n = 0;
 	
@@ -388,7 +388,7 @@ export interface BitSet {
 
 export class DenseBits implements BitSet {
 
-	constructor(protected bits: bigint = 0n) {
+	constructor(protected bits = 0n) {
 	}
 	protected create(bits?: bigint): this {
 		return new (this.constructor as new (bits?: bigint) => this)(bits);
@@ -852,7 +852,8 @@ function sparseClearMask(bits: sparsebits, i: number, m: number, undef = 0) {
 }
 
 function sparseSetRange(bits: sparsebits, a: number, b: number, undef = 0) {
-	let i = a >> 5, j = b >> 5;
+	let i = a >> 5;
+	const j = b >> 5;
 	if (i === j) {
 		sparseSetMask(bits, i, (1 << (b & 0x1f)) - (1 << (a & 0x1f)), undef);
 	} else {
@@ -868,7 +869,8 @@ function sparseSetRange(bits: sparsebits, a: number, b: number, undef = 0) {
 	}
 }
 function sparseClearRange(bits: sparsebits, a: number, b: number, undef = 0) {
-	let i = a >> 5, j = b >> 5;
+	let i = a >> 5;
+	const j = b >> 5;
 	if (i === j) {
 		sparseClearMask(bits, i, (1 << (b & 0x1f)) - (1 << (a & 0x1f)), undef);
 	} else {
@@ -928,36 +930,32 @@ function sparseComplement(bits: sparsebits): sparsebits {
 function sparseIntersect(bits: sparsebits, other: sparsebits): sparsebits {
 	const result: sparsebits = [];
 	for (const i in bits) {
-		if (other[i] !== undefined) {
+		if (other[i] !== undefined)
 			result[i] = bits[i] & other[i];
-		}
 	}
 	return result;
 }
 function sparseUnion(bits: sparsebits, other: sparsebits): sparsebits {
 	const result: sparsebits = [];
 	for (const i in bits) {
-		if (other[i] !== undefined) {
+		if (other[i] !== undefined)
 			result[i] = bits[i] | other[i];
-		}
 	}
 	return result;
 }
 function sparseXor(bits: sparsebits, other: sparsebits): sparsebits {
 	const result: sparsebits = [];
 	for (const i in bits) {
-		if (other[i] !== undefined) {
+		if (other[i] !== undefined)
 			result[i] = bits[i] ^ other[i];
-		}
 	}
 	return result;
 }
 function sparseDifference(bits: sparsebits, other: sparsebits): sparsebits {
 	const result: sparsebits = [];
 	for (const i in bits) {
-		if (other[i] !== undefined) {
+		if (other[i] !== undefined)
 			result[i] = bits[i] & ~other[i];
-		}
 	}
 	return result;
 }
@@ -1093,7 +1091,7 @@ function *sparseWhere(bits: sparsebits, set: boolean, from = -1, to?: number, un
 
 function *sparseRanges(bits: sparsebits, set: boolean, undef = 0): Generator<[number, number]> {
 	let start = -1, end = 0;
-	let other = undef ? set : !set;
+	const other = undef ? set : !set;
 
 	for (const i in bits) {
 		let b = bits[i] ^ undef;

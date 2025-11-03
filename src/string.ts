@@ -98,10 +98,10 @@ export function splitEvery(s : string, n : number) {
 }
 
 export function tag(strings: TemplateStringsArray, ...keys: any[]) {
-    return (...values: any[]) => {
-        const dict	= values.at(-1) || {};
+	return (...values: any[]) => {
+		const dict	= values.at(-1) || {};
 		return keys.map((key, i) => (Number.isInteger(key) ? values[key] : dict[key]) + strings[i + 1]).join('');
-    };
+	};
 }
 
 export function previousChar(str: string, pos: number) {
@@ -113,7 +113,7 @@ export function previousChar(str: string, pos: number) {
 }
 
 export function hasCustomToString(value: any): boolean {
-    return value && value.toString !== Object.prototype.toString;
+	return value && value.toString !== Object.prototype.toString;
 }
 
 export class StringParser {

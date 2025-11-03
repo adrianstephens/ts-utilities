@@ -55,3 +55,24 @@ export function rotate<T>(array: T[], start: number, end: number, shift: number)
 export function make<T>(n: number, constructor: new () => T): T[] {
 	return Array.from({length: n}, () => new constructor);
 }
+
+export function* lazySlice<T>(array: T[], start?: number, end?: number): Generator<T> {
+	const len = array.length;
+	if (start === undefined)
+		start = 0;
+	else if (start < 0)
+		start = Math.max(len + start, 0);
+	else
+		start = Math.min(start, len);
+
+	if (end === undefined)
+		end = len;
+	else if (end < 0)
+		end = Math.max(len + start, 0);
+	else
+		end = Math.min(end, len);
+
+	for (let i = start; i < end; i++)
+		yield array[i];
+}
+

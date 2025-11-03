@@ -1,7 +1,7 @@
 
 import * as array from './array';
 
-// resut of ...
+// result of ...
 export type SpreadType<T> = T extends Iterable<infer U> ? U[] : never;
 
 export function remove<T>(iterable: Iterable<T>, item: T) {

@@ -16,7 +16,8 @@
 		"README.md"
 	],
 	"scripts": {
-		"build": "tsc"
+		"build": "tsc",
+		"lint": "eslint \"src/**/*.ts\""
 	},
 	"keywords": [
 		"typescript",
