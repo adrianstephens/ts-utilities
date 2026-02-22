@@ -10,6 +10,10 @@ export async function map<T,U>(iterable: Iterable<T>|undefined, func:(v: T, i:nu
 	return Promise.all(iterator.map(iterable, func));
 }
 
+export async function mapObject<T, U>(obj: Record<string, T>, func:(x:[k:string, v:T]) => Promise<[k:string, v:U]>) : Promise<Record<string, U>> {
+	return Object.fromEntries(await Promise.all(Object.entries(obj).map(x => func(x))));
+}
+
 export async function mapSerial<T,U>(iterable: Iterable<T>|undefined, func:(v: T, i:number) => Promise<U>): Promise<U[]> {
 	const results: U[] = [];
 	let i = 0;
@@ -31,5 +35,4 @@ export async function filter<T>(iterable: Iterable<T>, func:(v: T) => Promise<un
 	const filters = await map(iterable, func);
 	return iterator.filter(iterable, (_, i) => filters[i]);
 }
-
 

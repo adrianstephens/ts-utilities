@@ -1,5 +1,6 @@
 {
 	"compilerOptions": {
+		"composite": true,
 		"target": "ES2022",
 		"module": "commonjs",
 		"strict": true,
@@ -8,6 +9,7 @@
 		"esModuleInterop": true,
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,
+		"sourceMap": true,
 		"outDir": "./dist",
 		"rootDir": "./src"
 	},

@@ -45,20 +45,31 @@ export function replace(value: string, re: RegExp, process: (match: RegExpExecAr
 	return result + value.substring(i);
 }
 /*
+export async function async_replace<T = undefined>(value: string, re: RegExp, process: (match: RegExpExecArray, right: (context?: T)=>Promise<string>, context?: T)=>Promise<string>, context?: T): Promise<string> {
+	const right		= async (context?: T) => async_replace(value, re, process, context);
+	let result = "";
+	let i = re.lastIndex;
+	for (let m; (m = re.exec(value));) {
+		result += value.substring(i, m.index) + await process(m, right, context);
+		i = re.lastIndex;
+	}
+	re.lastIndex = value.length;
+	return result + value.substring(i);
+}
+*/
 export async function async_replace(value: string, re: RegExp, process: (match: RegExpExecArray)=>Promise<string>): Promise<string> {
 	let result = "";
-	let i = 0;
+	let i = re.lastIndex;
 	for (let m; (m = re.exec(value));) {
 		result += value.substring(i, m.index) + await process(m);
 		i = re.lastIndex;
 	}
+	re.lastIndex = value.length;
 	return result + value.substring(i);
 }
-*/
 
-export async function async_replace(value: string, re: RegExp, process: (match: RegExpExecArray)=>Promise<string>): Promise<string> {
-	const combine = async (m: RegExpExecArray) => value.substring(i, m!.index) + await process(m!);
-
+export async function async_replace_async(value: string, re: RegExp, process: (match: RegExpExecArray)=>Promise<string>): Promise<string> {
+	const combine	= async (m: RegExpExecArray) => value.substring(i, m!.index) + await process(m!);
 	const promises: Promise<string>[] = [];
 	let i = 0;
 	for (let m; (m = re.exec(value));) {

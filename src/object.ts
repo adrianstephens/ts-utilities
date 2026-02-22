@@ -61,6 +61,11 @@ export class Lazy<T> {
 	}
 }
 
+export function Memoize<T>(func: () => T) {
+	const lazy = new Lazy(func);
+	return () => lazy.value;
+}
+
 export class CallCombiner0 {
 	private timeout?: ReturnType<typeof setTimeout>;
 

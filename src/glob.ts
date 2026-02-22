@@ -21,7 +21,7 @@ const posixClasses: Record<string, string> = {
 // Glob pattern to regex
 //-----------------------------------------------------------------------------
 
-export function parseGlob(glob: string): string {
+export function parse(glob: string): string {
 	let result = '';
 	let depth = 0;
 
@@ -105,10 +105,10 @@ export function anchoredRe(re: string) {
 	return new RegExp(`^${re}$`);
 }
 
-export function globToRe(glob: string) {
-	return anchoredRe(parseGlob(glob));
+export function toRe(glob: string) {
+	return anchoredRe(parse(glob));
 }
 
-export function globToReMulti(globs: string[]) {
-	return anchoredRe(globs.map(parseGlob).join('|'));
+export function toReMulti(globs: string[]) {
+	return anchoredRe(globs.map(parse).join('|'));
 }
