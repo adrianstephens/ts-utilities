@@ -1,4 +1,4 @@
-import { compare } from "./object";
+import { compare } from "./index";
 
 type PartitionIndex<U> = U extends boolean ? 'true'|'false' : U;
 
