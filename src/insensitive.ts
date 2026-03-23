@@ -1,4 +1,7 @@
-class CaseInsensitiveString {
+
+type string2 = string|istring;
+
+class istring {
 	private value: string;
 	constructor(value: string)	{ this.value = value.toUpperCase(); }
 	get length()				{ return this.value.length;}
@@ -6,29 +9,29 @@ class CaseInsensitiveString {
 	toUpperCase() 				{ return this.value; }
 	toLowerCase() 				{ return this.value.toLowerCase(); }
   
-	includes(searchString: string, position?: number)	{ return this.value.includes(searchString.toUpperCase(), position); }
-	startsWith(searchString: string, position?: number)	{ return this.value.startsWith(searchString.toUpperCase(), position); }
-	endsWith(searchString: string, position?: number) 	{ return this.value.endsWith(searchString.toUpperCase(), position); }
-	indexOf(searchString: string, position?: number) 	{ return this.value.indexOf(searchString.toUpperCase(), position); }
-	lastIndexOf(searchString: string, position?: number){ return this.value.lastIndexOf(searchString.toUpperCase(), position); }
+	includes(searchString: string2, position?: number)	{ return this.value.includes(searchString.toUpperCase(), position); }
+	startsWith(searchString: string2, position?: number)	{ return this.value.startsWith(searchString.toUpperCase(), position); }
+	endsWith(searchString: string2, position?: number) 	{ return this.value.endsWith(searchString.toUpperCase(), position); }
+	indexOf(searchString: string2, position?: number) 	{ return this.value.indexOf(searchString.toUpperCase(), position); }
+	lastIndexOf(searchString: string2, position?: number){ return this.value.lastIndexOf(searchString.toUpperCase(), position); }
 
-	compare(other: string|CaseInsensitiveString)		{ const bi = other.toUpperCase(); return this.value < bi ? -1 : this.value > bi ? 1 : 0; }
+	compare(other: string2)		{ const bi = other.toUpperCase(); return this.value < bi ? -1 : this.value > bi ? 1 : 0; }
 }
 
 // keeps original string
-class CaseInsensitiveString2 extends CaseInsensitiveString {
+class istring2 extends istring {
 	constructor(private orig: string) { super(orig); }
 	toString() 		{ return this.orig; }
 }
 
 export function String(value: string) {
-	return new CaseInsensitiveString(value);
+	return new istring(value);
 }
 export function String2(value: string) {
-	return new CaseInsensitiveString2(value);
+	return new istring2(value);
 }
 
-export function compare(a: string|CaseInsensitiveString, b: string|CaseInsensitiveString) {
+export function compare(a: string2, b: string2) {
 	const ai = a.toUpperCase(), bi = b.toUpperCase();
 	return ai < bi ? -1 : ai > bi ? 1 : 0;
 }

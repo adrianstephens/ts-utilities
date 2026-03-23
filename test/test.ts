@@ -36,9 +36,8 @@ sp.set(42);
 sp.set(1000);
 sp.set(10000);
 
-for (const i of sp) {
+for (const i of sp)
 	console.log(i);
-}
 
 
 /*
@@ -52,16 +51,13 @@ for (let i = sp.next(-1, false); i !== -1; i = sp.next(i, false)) {
 sp.set(0);
 sp.set(2);
 sp.selfComplement();
-for (const i of sp.ranges()) {
+for (const i of sp.ranges())
 	console.log(i);
-}
 
 
-for (const i of sp.where(false)) {
+for (const i of sp.where(false))
 	console.log(i);
-}
 
 
-for (let i = sp.next(-1); i !== -1; i = sp.next(i)) {
+for (let i = sp.next(-1); i !== -1; i = sp.next(i))
 	console.log(i);
-}

@@ -267,9 +267,10 @@ export function nthSet(x: bigint|number, i: number): number {
 export function reverse(x: number): number;
 export function reverse(x: bigint): bigint;
 export function reverse(x: number|bigint) {
-	if (typeof x === 'number')
+	if (x < 0x100000000)
 		return reverse32(Number(x));
 
+	x = BigInt(x);
 	let k	= 5;
 	for (let t = x >> 32n; t;)
 		t >>= BigInt(1 << k++);
@@ -333,30 +334,19 @@ export function clearLowest(x: bigint|number): bigint|number {
 export interface BitSet {
 	// non-mutating methods
 
-	// Returns true if bit 'a' is set
-	test(a: number): boolean;
-	// Returns true if this and other have exactly the same bits set
-	equals(other: this): boolean;
-	// Returns true if all bits set in 'other' are also set in this
-	contains(other: this): boolean;
-	// Returns true if any bits are set in both this and other
-	intersects(other: this): boolean;
-	// Returns the number of bits set to 1
-	countSet(): number;
-	// Returns the index of the 'a'th set bit
-	nthSet(a: number): number;
-	// Returns a new bitset with all bits flipped
-	complement(): BitSet;
-	// Returns a new bitset with only the bits set in both this and other
-	intersect(other: this): BitSet;
-	// Returns a new bitset with all bits set in either this or other
-	union(other: this): BitSet;
-	// Returns a new bitset with bits set in either this or other, but not both
-	xor(other: this): BitSet;
-	// Returns a new bitset with bits set in this but not in other
-	difference(other: this): BitSet;
-	// Returns the next index after 'a' that is set (or clear), or -1 if none
-	next(a: number, set: boolean): number;
+	test(a: number): boolean;				// Returns true if bit 'a' is set
+	equals(other: this): boolean;			// Returns true if this and other have exactly the same bits set
+	contains(other: this): boolean;			// Returns true if all bits set in 'other' are also set in this
+	intersects(other: this): boolean;		// Returns true if any bits are set in both this and other
+	countSet(): number;						// Returns the number of bits set to 1
+	nthSet(a: number): number;				// Returns the index of the 'a'th set bit
+	complement(): BitSet;					// Returns a new bitset with all bits flipped
+	intersect(other: this): BitSet;			// Returns a new bitset with only the bits set in both this and other
+	union(other: this): BitSet;				// Returns a new bitset with all bits set in either this or other
+	xor(other: this): BitSet;				// Returns a new bitset with bits set in either this or other, but not both
+	difference(other: this): BitSet;		// Returns a new bitset with bits set in this but not in other
+	next(a: number, set: boolean): number;	// Returns the next index after 'a' that is set (or clear), or -1 if none
+
 	// Returns an iterator over all set (or clear) bits, starting after 'from'
 	where(set: boolean, from?: number, to?: number): { [Symbol.iterator](): Generator<number> };
 	// Returns an iterator over all ranges of set (or clear) bits
@@ -366,14 +356,11 @@ export interface BitSet {
 
 	//mutating methods
 
-	// Sets bit 'a'
-	set(a: number): void;
-	// Clears bit 'a'
-	clear(a: number): void;
-	// Sets all bits in [a,b)
-	setRange(a: number, b: number): this;
-	// Clears all bits in [a,b)
-	clearRange(a: number, b: number): this;
+	set(a: number): void;					// Sets bit 'a'
+	clear(a: number): void;					// Clears bit 'a'
+	setRange(a: number, b: number): this;	// Sets all bits in [a,b)
+	clearRange(a: number, b: number): this;	// Clears all bits in [a,b)
+
 	// In-place versions of complement, intersect, union, xor
 	selfComplement?(): this;
 	selfIntersect(other: this): this;
@@ -802,6 +789,7 @@ export class DenseBits32 implements BitSet {
 //-----------------------------------------------------------------------------
 // SparseBits - a sparse bitset where each entry in the 'bits' array represents 32 bits
 //-----------------------------------------------------------------------------
+
 type sparsebits = Record<number, number>;
 
 function sparseFromIndices(indices: number[]) {

@@ -1,5 +1,5 @@
 
-import {compare as _compare} from './index';
+import {compare as _compare, less} from './index';
 
 //-----------------------------------------------------------------------------
 //	array
@@ -76,3 +76,43 @@ export function* lazySlice<T>(array: T[], start?: number, end?: number): Generat
 		yield array[i];
 }
 
+
+export function lowerBound<T>(array: T[], value: T, func: (a: T, b: T, i: number) => boolean = less) {
+	let i = 0;
+	for (let n = array.length; n; n >>= 1) {
+		const mid = i + (n >> 1);
+		if (func(array[mid], value, mid)) {
+			i = mid + 1;
+			--n;
+		}
+	}
+	return i;
+}
+
+export function argmin<T>(array: T[], func: (a: T, b: T) => number = _compare) {
+	let mini	= 0;
+	for (let i = 1; i < array.length; i++) {
+		const v = func(array[i], array[mini]);
+		if (v < 0)
+			mini = i;
+	}
+	return mini;
+}
+
+export function min<T>(array: T[], func: (a: T, b: T) => number = _compare) {
+	return array[argmin(array, func)];
+}
+
+export function argmax<T>(array: T[], func: (a: T, b: T) => number = _compare) {
+	let maxi	= 0;
+	for (let i = 1; i < array.length; i++) {
+		const v = func(array[i], array[maxi]);
+		if (v > 0)
+			maxi = i;
+	}
+	return maxi;
+}
+
+export function max<T>(array: T[], func: (a: T, b: T) => number = _compare) {
+	return array[argmax(array, func)];
+}

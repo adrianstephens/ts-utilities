@@ -45,3 +45,12 @@ export function filter<T>(iterable: Iterable<T>, func:(v: T, i: number)=>unknown
 			array.push(v);
 	return array;
 }
+
+type PartitionIndex<U> = U extends boolean ? 'true'|'false' : U;
+
+export function partition<T, U extends keyof any | boolean>(array: Iterable<T>, func: (v: T) => U) : Record<PartitionIndex<U>, T[]> {
+	const partitions = {} as Record<PartitionIndex<U>, T[]>;
+	for (const i of array)
+		(partitions[func(i) as unknown as PartitionIndex<U>] ??= []).push(i);
+	return partitions;
+}

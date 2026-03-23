@@ -30,6 +30,13 @@ export function splitLastOf(value: string, find: string) {
 	return index === -1 ? [value, undefined] : [value.substring(0, index), value.substring(index + 1)];
 }
 
+export function splitEvery(s : string, n : number) {
+	return Array.from(
+		{length: Math.ceil(s.length / n)},
+		(_, i) => s.slice(i * n, (i + 1) * n)
+	);
+}
+
 export function trim0(value: string) {
 	const index = value.indexOf('\0');
 	return index === -1 ? value : value.substring(0, index);
@@ -101,13 +108,6 @@ export async function async_replace_back(value: string, re: RegExp, process: (ma
 	return value.substring(start);
 }
 
-export function splitEvery(s : string, n : number) {
-	return Array.from(
-		{length: Math.ceil(s.length / n)},
-		(_, i) => s.slice(i * n, (i + 1) * n)
-	);
-}
-
 export function tag(strings: TemplateStringsArray, ...keys: any[]) {
 	return (...values: any[]) => {
 		const dict	= values.at(-1) || {};
@@ -157,18 +157,14 @@ export class StringParser {
 			throw new Error(`Expected '${c}'`);
 	}
 
-	match(re: RegExp) {
-		const m = re.exec(this.remainder());
-		if (m) {
-			this.pos += m.index + m[0].length;
-			return m[0];
-		}
-	}
 	exec(re: RegExp) {
 		const m = re.exec(this.remainder());
 		if (m) {
 			this.pos += m.index + m[0].length;
 			return m;
 		}
+	}
+	match(re: RegExp) {
+		return this.exec(re)?.[0];
 	}
 }

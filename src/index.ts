@@ -2,7 +2,8 @@ import * as async from './async';
 
 export * from './iterator';
 export * from './string';
-export * from './algorithm';
+export {lowerBound, argmin, min, argmax, max} from './array';
+export {partition} from './iterator';
 
 export * as obj from './obj';
 export * as glob from './glob';
@@ -17,6 +18,10 @@ export * as insensitive from './insensitive';
 
 export function compare<T>(a: T, b: T) : number {
 	return a < b ? -1 : a > b ? 1 : 0;
+}
+
+export function less<T>(a: T, b: T): boolean {
+	return a < b;
 }
 
 export function reverse_compare<T>(a: T, b: T) : number {
@@ -52,7 +57,6 @@ export function difference<T>(a: Set<T>, b: Set<T>): [Set<T>, Set<T>] {
 	}
 	return [remaining, removed];
 }
-
 
 //-----------------------------------------------------------------------------
 // regex functions
